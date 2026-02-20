@@ -6,4 +6,8 @@ out/
 *.log
 .env
 .env.local
+.env.production
+livekit.production.yaml
+docker-compose.production.yml
+*.key
 .DS_Store

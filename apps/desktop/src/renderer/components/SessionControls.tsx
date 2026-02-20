@@ -24,6 +24,95 @@ interface Props {
     onVerifyPin: (roomName: string, pin: string) => Promise<boolean>
 }
 
+// [P3-#14] Extracted reusable PlayerList component
+function PlayerList({
+    players,
+    masterVolume,
+    allMuted,
+    onMasterVolumeChange,
+    onToggleMuteAll,
+    onPlayerVolumeChange
+}: {
+    players: ConnectedPlayer[]
+    masterVolume: number
+    allMuted: boolean
+    onMasterVolumeChange: (vol: number) => void
+    onToggleMuteAll: () => void
+    onPlayerVolumeChange: (identity: string, volume: number) => void
+}) {
+    const remoteCount = players.filter(p => !p.isLocal).length
+
+    return (
+        <div className="channel-players">
+            {remoteCount > 0 && (
+                <div className="master-volume">
+                    <Volume2 size={13} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+                    <span className="master-volume-label">All</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step={5}
+                        value={masterVolume}
+                        onChange={(e) => {
+                            const vol = Number(e.target.value)
+                            onMasterVolumeChange(vol)
+                            players.filter(p => !p.isLocal).forEach(p => onPlayerVolumeChange(p.identity, vol))
+                        }}
+                        className="player-volume-slider"
+                        style={{
+                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${masterVolume}%, var(--bg-primary) ${masterVolume}%, var(--bg-primary) 100%)`
+                        }}
+                    />
+                    <span className="player-volume-value">{masterVolume}%</span>
+                    <button
+                        className={`master-mute-btn ${allMuted ? 'active' : ''}`}
+                        onClick={onToggleMuteAll}
+                        title={allMuted ? 'Unmute All' : 'Mute All'}
+                    >
+                        {allMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                    </button>
+                </div>
+            )}
+
+            {players.map((player) => (
+                <div key={player.identity} className="player-row">
+                    <div className="player-info">
+                        <div
+                            className={`player-dot ${player.isSpeaking ? 'speaking' : player.isMuted ? 'muted' : 'online'}`}
+                        />
+                        <span className="player-name">
+                            {player.displayName}
+                            {player.isLocal && ' (you)'}
+                        </span>
+                        {!player.isLocal && player.isMuted && (
+                            <MicOff size={12} style={{ color: 'var(--text-muted)', marginLeft: 4 }} />
+                        )}
+                    </div>
+                    {!player.isLocal && (
+                        <div className="player-volume">
+                            <Volume2 size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                step={5}
+                                value={player.volume}
+                                onChange={(e) => onPlayerVolumeChange(player.identity, Number(e.target.value))}
+                                className="player-volume-slider"
+                                style={{
+                                    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${player.volume}%, var(--bg-primary) ${player.volume}%, var(--bg-primary) 100%)`
+                                }}
+                            />
+                            <span className="player-volume-value">{player.volume}%</span>
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
+    )
+}
+
 export function SessionControls({
     isConnected,
     isConnecting,
@@ -84,6 +173,7 @@ export function SessionControls({
         }
     }
 
+    // [P2-#8] Fixed: clicking default channel now also triggers connect
     const handleChannelClick = (ch: ChannelInfo) => {
         if (isConnected) return
         if (ch.isCustom && ch.hasPin) {
@@ -93,21 +183,24 @@ export function SessionControls({
             setPinError('')
             setShowPinDialog(true)
         } else if (ch.isCustom) {
-            // Custom channel without PIN — find roomName from channels list
-            const customRoomName = `custom-${ch.channel}`
-            onConnect(customRoomName)
+            // Custom channel without PIN — use roomName from server
+            onConnect(ch.roomName || ch.name)
         } else {
-            onChannelChange(ch.channel)
+            // Default channel — update setting AND connect
+            if (ch.channel !== undefined) {
+                onChannelChange(ch.channel)
+            }
+            onConnect()
         }
     }
 
     const handlePinSubmit = async () => {
         if (!pendingChannel) return
-        const customRoomName = `custom-${pendingChannel.channel}`
-        const valid = await onVerifyPin(customRoomName, pinInput)
+        const actualRoomName = pendingChannel.roomName || pendingChannel.name
+        const valid = await onVerifyPin(actualRoomName, pinInput)
         if (valid) {
             setShowPinDialog(false)
-            onConnect(customRoomName, pinInput)
+            onConnect(actualRoomName, pinInput)
         } else {
             setPinError('Wrong PIN')
         }
@@ -166,10 +259,11 @@ export function SessionControls({
 
                 {/* Default channels */}
                 {defaultChannels.map((ch) => {
-                    const isActive = channel === ch.channel && !roomName.startsWith('custom-')
-                    const isCurrent = isConnected && roomName === `ch-${ch.channel}`
+                    const chNum = ch.channel ?? 0
+                    const isActive = channel === chNum
+                    const isCurrent = isConnected && roomName === `ch-${chNum}`
                     return (
-                        <div key={ch.channel} className="channel-item-wrapper">
+                        <div key={chNum} className="channel-item-wrapper">
                             <button
                                 className={`channel-item ${isActive ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
@@ -177,7 +271,7 @@ export function SessionControls({
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
-                                    Channel {ch.channel}
+                                    Channel {chNum}
                                 </span>
                                 {ch.playerCount > 0 && (
                                     <span className="channel-badge">
@@ -187,74 +281,14 @@ export function SessionControls({
                             </button>
 
                             {isCurrent && players.length > 0 && (
-                                <div className="channel-players">
-                                    {players.filter(p => !p.isLocal).length > 0 && (
-                                        <div className="master-volume">
-                                            <Volume2 size={13} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
-                                            <span className="master-volume-label">All</span>
-                                            <input
-                                                type="range"
-                                                min="0"
-                                                max="100"
-                                                step={5}
-                                                value={masterVolume}
-                                                onChange={(e) => {
-                                                    const vol = Number(e.target.value)
-                                                    setMasterVolume(vol)
-                                                    players.filter(p => !p.isLocal).forEach(p => onPlayerVolumeChange(p.identity, vol))
-                                                }}
-                                                className="player-volume-slider"
-                                                style={{
-                                                    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${masterVolume}%, var(--bg-primary) ${masterVolume}%, var(--bg-primary) 100%)`
-                                                }}
-                                            />
-                                            <span className="player-volume-value">{masterVolume}%</span>
-                                            <button
-                                                className={`master-mute-btn ${allMuted ? 'active' : ''}`}
-                                                onClick={onToggleMuteAll}
-                                                title={allMuted ? 'Unmute All' : 'Mute All'}
-                                            >
-                                                {allMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {players.map((player) => (
-                                        <div key={player.identity} className="player-row">
-                                            <div className="player-info">
-                                                <div
-                                                    className={`player-dot ${player.isSpeaking ? 'speaking' : player.isMuted ? 'muted' : 'online'
-                                                        }`}
-                                                />
-                                                <span className="player-name">
-                                                    {player.identity}
-                                                    {player.isLocal && ' (you)'}
-                                                </span>
-                                                {!player.isLocal && player.isMuted && (
-                                                    <MicOff size={12} style={{ color: 'var(--text-muted)', marginLeft: 4 }} />
-                                                )}
-                                            </div>
-                                            {!player.isLocal && (
-                                                <div className="player-volume">
-                                                    <Volume2 size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
-                                                    <input
-                                                        type="range"
-                                                        min="0"
-                                                        max="100"
-                                                        step={5}
-                                                        value={player.volume}
-                                                        onChange={(e) => onPlayerVolumeChange(player.identity, Number(e.target.value))}
-                                                        className="player-volume-slider"
-                                                        style={{
-                                                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${player.volume}%, var(--bg-primary) ${player.volume}%, var(--bg-primary) 100%)`
-                                                        }}
-                                                    />
-                                                    <span className="player-volume-value">{player.volume}%</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                <PlayerList
+                                    players={players}
+                                    masterVolume={masterVolume}
+                                    allMuted={allMuted}
+                                    onMasterVolumeChange={setMasterVolume}
+                                    onToggleMuteAll={onToggleMuteAll}
+                                    onPlayerVolumeChange={onPlayerVolumeChange}
+                                />
                             )}
                         </div>
                     )
@@ -268,7 +302,7 @@ export function SessionControls({
                 )}
 
                 {customChannels.map((ch) => {
-                    const customRoomName = `custom-${ch.channel}`
+                    const customRoomName = ch.roomName || ch.name
                     const isCurrent = isConnected && roomName === customRoomName
                     return (
                         <div key={customRoomName} className="channel-item-wrapper">
@@ -290,79 +324,18 @@ export function SessionControls({
                             </button>
 
                             {isCurrent && players.length > 0 && (
-                                <div className="channel-players">
-                                    {players.filter(p => !p.isLocal).length > 0 && (
-                                        <div className="master-volume">
-                                            <Volume2 size={13} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
-                                            <span className="master-volume-label">All</span>
-                                            <input
-                                                type="range"
-                                                min="0"
-                                                max="100"
-                                                step={5}
-                                                value={masterVolume}
-                                                onChange={(e) => {
-                                                    const vol = Number(e.target.value)
-                                                    setMasterVolume(vol)
-                                                    players.filter(p => !p.isLocal).forEach(p => onPlayerVolumeChange(p.identity, vol))
-                                                }}
-                                                className="player-volume-slider"
-                                                style={{
-                                                    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${masterVolume}%, var(--bg-primary) ${masterVolume}%, var(--bg-primary) 100%)`
-                                                }}
-                                            />
-                                            <span className="player-volume-value">{masterVolume}%</span>
-                                            <button
-                                                className={`master-mute-btn ${allMuted ? 'active' : ''}`}
-                                                onClick={onToggleMuteAll}
-                                                title={allMuted ? 'Unmute All' : 'Mute All'}
-                                            >
-                                                {allMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {players.map((player) => (
-                                        <div key={player.identity} className="player-row">
-                                            <div className="player-info">
-                                                <div
-                                                    className={`player-dot ${player.isSpeaking ? 'speaking' : player.isMuted ? 'muted' : 'online'}`}
-                                                />
-                                                <span className="player-name">
-                                                    {player.identity}
-                                                    {player.isLocal && ' (you)'}
-                                                </span>
-                                                {!player.isLocal && player.isMuted && (
-                                                    <MicOff size={12} style={{ color: 'var(--text-muted)', marginLeft: 4 }} />
-                                                )}
-                                            </div>
-                                            {!player.isLocal && (
-                                                <div className="player-volume">
-                                                    <Volume2 size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
-                                                    <input
-                                                        type="range"
-                                                        min="0"
-                                                        max="100"
-                                                        step={5}
-                                                        value={player.volume}
-                                                        onChange={(e) => onPlayerVolumeChange(player.identity, Number(e.target.value))}
-                                                        className="player-volume-slider"
-                                                        style={{
-                                                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${player.volume}%, var(--bg-primary) ${player.volume}%, var(--bg-primary) 100%)`
-                                                        }}
-                                                    />
-                                                    <span className="player-volume-value">{player.volume}%</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                <PlayerList
+                                    players={players}
+                                    masterVolume={masterVolume}
+                                    allMuted={allMuted}
+                                    onMasterVolumeChange={setMasterVolume}
+                                    onToggleMuteAll={onToggleMuteAll}
+                                    onPlayerVolumeChange={onPlayerVolumeChange}
+                                />
                             )}
                         </div>
                     )
                 })}
-
-
             </div>
 
             {/* Create channel dialog */}

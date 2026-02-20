@@ -83,10 +83,6 @@ app.on('window-all-closed', () => {
 })
 
 // IPC handlers
-ipcMain.handle('get-server-url', () => {
-    return process.env.GAMERSCREAM_SERVER_URL || 'http://localhost:3002'
-})
-
 ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall(false, true)
 })

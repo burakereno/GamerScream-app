@@ -9,6 +9,8 @@ import { useSettings } from './hooks/useSettings'
 import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
+const APP_VERSION = '1.1.0'
+
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
 
@@ -39,7 +41,7 @@ export default function App() {
 
     // Listen for auto-update events from main process
     useEffect(() => {
-        const api = (window as any).electronAPI
+        const api = window.electronAPI
         if (!api?.onUpdateAvailable) return
         api.onUpdateAvailable((info: { version: string }) => {
             setUpdateVersion(info.version)
@@ -109,15 +111,15 @@ export default function App() {
         }
     }, [settings.speakerId, speakers, setSelectedSpeaker])
 
-    // Auto-connect on launch or after entering name
+    // [P2-#12] Auto-connect on launch — requires accessVerified
     useEffect(() => {
-        if (hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !autoConnectDone.current) {
+        if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !autoConnectDone.current) {
             autoConnectDone.current = true
             connect(settings.username, settings.channel, selectedMic, micLevel).catch((err) => {
                 setConnectError(err instanceof Error ? err.message : 'Auto-connect failed')
             })
         }
-    }, [hasEnteredName, settings.autoConnect]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [accessVerified, hasEnteredName, settings.autoConnect]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleUsernameSubmit = (username: string) => {
         updateSetting('username', username)
@@ -175,7 +177,7 @@ export default function App() {
                     className="update-banner no-drag"
                     onClick={() => {
                         if (updateReady) {
-                            (window as any).electronAPI?.installUpdate()
+                            window.electronAPI?.installUpdate()
                         }
                     }}
                 >
@@ -264,7 +266,7 @@ export default function App() {
                     </div>
 
                     <div className="settings-version">
-                        <span className="version-badge">v1.0.0</span>
+                        <span className="version-badge">v{APP_VERSION}</span>
                     </div>
                 </div>
             )}

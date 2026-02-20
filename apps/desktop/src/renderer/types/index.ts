@@ -1,5 +1,8 @@
 export interface ElectronAPI {
     getServerUrl: () => Promise<string>
+    onUpdateAvailable: (callback: (info: { version: string }) => void) => void
+    onUpdateDownloaded: (callback: (info: { version: string }) => void) => void
+    installUpdate: () => void
 }
 
 declare global {
@@ -16,6 +19,7 @@ export interface AudioDeviceInfo {
 
 export interface ConnectedPlayer {
     identity: string
+    displayName: string
     isMuted: boolean
     isSpeaking: boolean
     isLocal: boolean
@@ -23,8 +27,9 @@ export interface ConnectedPlayer {
 }
 
 export interface ChannelInfo {
-    channel: number
+    channel?: number
     name: string
+    roomName?: string // actual LiveKit room name for custom channels
     playerCount: number
     hasPin?: boolean
     isCustom?: boolean

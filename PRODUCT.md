@@ -1,4 +1,4 @@
-# SADO Game Voice
+# GamerScream
 
 Lightweight, real-time voice chat for gaming parties. Built with **Electron + React + LiveKit**.
 
@@ -8,7 +8,8 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 |-------|------|------|
 | Desktop App | Electron + Vite + React + TypeScript | `apps/desktop/` |
 | Backend API | Node.js + Express 5 | `apps/server/` |
-| Voice Engine | LiveKit (WebRTC) | Self-hosted / Cloud |
+| Voice Engine | LiveKit (WebRTC) | Self-hosted on Oracle Cloud VM |
+| Landing Page | Next.js | `GamerScream-web/` |
 
 **Monorepo** managed with `pnpm workspaces`.
 
@@ -25,6 +26,12 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 - PIN entry dialog when joining locked channels
 - Auto-created, auto-deleted when all participants leave (10s grace period)
 - Server stores custom channels in-memory (`Map<string, CustomChannel>`)
+
+### App-Level PIN Gate
+- **PIN 1520** required on first launch or new device
+- HMAC-based access token generated server-side, stored in `localStorage`
+- All API endpoints protected via `x-access-token` header
+- PIN never exposed to the client — validated server-side only
 
 ### Per-Player Volume Control
 - Individual volume sliders per remote participant (0–100%, step 5)
@@ -65,7 +72,8 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | `apps/desktop/src/renderer/components/UsernameEntry.tsx` | Name entry screen |
 | `apps/desktop/src/renderer/styles/index.css` | All styles (dark theme, cards, dialogs, sliders) |
 | `apps/desktop/src/renderer/types/index.ts` | Shared TypeScript interfaces |
-| `apps/server/src/index.ts` | Express API: token gen, room list, custom channels, PIN verify |
+| `apps/server/src/index.ts` | Express API: token gen, room list, custom channels, PIN verify, access control |
+| `apps/desktop/src/renderer/components/PinEntry.tsx` | PIN entry screen (first launch) |
 
 ## API Endpoints (Server)
 
@@ -76,16 +84,20 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | GET | `/api/rooms` | List all channels with player counts (default + custom) |
 | POST | `/api/channels` | Create custom channel (`name`, `pin?`, `createdBy`) |
 | POST | `/api/channels/verify-pin` | Verify PIN for locked channel |
+| POST | `/api/verify-pin` | Verify app-level PIN, return access token |
 
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `VITE_SERVER_URL` | `http://localhost:3001` | Backend API URL |
+| `VITE_SERVER_URL` | `http://localhost:3002` | Backend API URL |
 | `LIVEKIT_API_KEY` | `devkey` | LiveKit API key |
 | `LIVEKIT_API_SECRET` | `devsecret` | LiveKit API secret |
-| `LIVEKIT_URL` | `ws://localhost:7880` | LiveKit WebSocket URL |
+| `LIVEKIT_URL` | `ws://localhost:7880` | LiveKit WebSocket URL (server-side) |
 | `LIVEKIT_HTTP_URL` | `http://localhost:7880` | LiveKit HTTP URL (room service) |
+| `LIVEKIT_CLIENT_URL` | `= LIVEKIT_URL` | LiveKit URL returned to clients (external-facing) |
+| `APP_PIN` | `1520` | App-level PIN for access |
+| `TOKEN_SECRET` | derived | HMAC secret for access tokens |
 
 ## Running Locally
 
@@ -97,9 +109,47 @@ pnpm --filter server dev
 pnpm --filter desktop dev
 ```
 
+## Production Deployment
+
+| Component | Detail |
+|-----------|--------|
+| **VM** | Oracle Cloud Always Free — VM.Standard.E2.1.Micro (1 OCPU, 1 GB RAM) |
+| **Region** | Germany Central (Frankfurt) |
+| **OS** | Ubuntu 22.04 |
+| **Public IP** | `144.24.183.24` |
+| **Domain** | `gamerscream.duckdns.org` |
+| **HTTPS** | Auto via Caddy + Let's Encrypt |
+| **API URL** | `https://gamerscream.duckdns.org/api/health` |
+| **LiveKit WS** | `ws://144.24.183.24:7880` |
+
+Services run as `systemd` units (auto-restart on failure, auto-start on reboot):
+- `livekit.service` — LiveKit server
+- `gamerscream.service` — Node.js backend API
+- `caddy.service` — HTTPS reverse proxy
+
+### Deploy / Redeploy
+
+```bash
+# SSH
+ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24
+
+# Redeploy backend
+cd apps/server && npm run build
+scp -i apps/desktop/build/ssh-key-2026-02-20.key -r dist/* ubuntu@144.24.183.24:~/gamerscream/dist/
+ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo systemctl restart gamerscream"
+```
+
+## Distribution
+
+- **Mac**: `.dmg` via `electron-builder` → GitHub Releases
+- **Windows**: `.exe` via `electron-builder` → GitHub Releases
+- **Landing page**: [gamerscream.vercel.app](https://gamerscream.vercel.app) with download links
+
 ## Upcoming / TODO
 
-- [ ] Integration testing with real LiveKit
-- [ ] Build & distribution (Mac `.dmg` / Windows `.exe` via `electron-builder`)
 - [ ] Push-to-talk mode
 - [ ] Noise suppression (Krisp-style)
+- [ ] DuckDNS cron job for dynamic IP updates
+- [x] ~~Build & distribution (Mac `.dmg` / Windows `.exe`)~~
+- [x] ~~App-level PIN gate~~
+- [x] ~~Production deployment (Oracle Cloud VM)~~

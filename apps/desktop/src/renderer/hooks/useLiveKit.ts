@@ -80,6 +80,7 @@ export function useLiveKit() {
 
         playerList.push({
             identity: localParticipant.identity,
+            displayName: localParticipant.name || localParticipant.identity,
             isMuted: !localParticipant.isMicrophoneEnabled,
             isSpeaking: localParticipant.isSpeaking,
             isLocal: true,
@@ -91,6 +92,7 @@ export function useLiveKit() {
             const savedVolume = volumeMapRef.current.get(key) ?? 100
             playerList.push({
                 identity: participant.identity,
+                displayName: participant.name || participant.identity,
                 isMuted: !participant.isMicrophoneEnabled,
                 isSpeaking: participant.isSpeaking,
                 isLocal: false,

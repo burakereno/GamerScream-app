@@ -10,23 +10,70 @@ const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'devkey'
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || 'devsecret'
 const LIVEKIT_URL = process.env.LIVEKIT_URL || 'ws://localhost:7880'
 const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL || 'http://localhost:7880'
+const LIVEKIT_CLIENT_URL = process.env.LIVEKIT_CLIENT_URL || LIVEKIT_URL
 
 // App-level PIN (server-side only — never sent to client)
 const APP_PIN = process.env.APP_PIN || '1520'
 const TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'
 
+// [P1-#4] Per-session access tokens with expiration
+const accessTokenStore = new Map<string, { expiresAt: number }>()
+const ACCESS_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000 // 30 days
+
 function generateAccessToken(): string {
-    return crypto.createHmac('sha256', TOKEN_SECRET).update('gamerscream-verified').digest('hex')
+    const token = crypto.randomBytes(32).toString('hex')
+    accessTokenStore.set(token, { expiresAt: Date.now() + ACCESS_TOKEN_TTL })
+    return token
 }
 
 function isValidAccessToken(token: string): boolean {
-    return token === generateAccessToken()
+    const entry = accessTokenStore.get(token)
+    if (!entry) return false
+    if (Date.now() > entry.expiresAt) {
+        accessTokenStore.delete(token)
+        return false
+    }
+    return true
+}
+
+// [P1-#2] Rate limiting for PIN verification
+const pinAttempts = new Map<string, { count: number; lastAttempt: number }>()
+const PIN_RATE_LIMIT = 5 // max attempts
+const PIN_RATE_WINDOW = 60 * 1000 // per minute
+
+function checkPinRateLimit(ip: string): boolean {
+    const now = Date.now()
+    const entry = pinAttempts.get(ip)
+    if (!entry || now - entry.lastAttempt > PIN_RATE_WINDOW) {
+        pinAttempts.set(ip, { count: 1, lastAttempt: now })
+        return true
+    }
+    if (entry.count >= PIN_RATE_LIMIT) return false
+    entry.count++
+    entry.lastAttempt = now
+    return true
+}
+
+// [P1-#3] Timing-safe PIN comparison
+function safeCompare(a: string, b: string): boolean {
+    if (a.length !== b.length) {
+        // Still do a comparison to avoid short-circuit timing leak
+        crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a))
+        return false
+    }
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
 
 const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 
-app.use(cors())
-app.use(express.json())
+// [P1-#1] Restrictive CORS — only allow Electron app (no browser origin)
+app.use(cors({
+    origin: false, // Electron requests have no origin header — block browser requests
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'x-access-token']
+}))
+// [P1-#5] Request body size limit
+app.use(express.json({ limit: '10kb' }))
 
 // ============================================
 // App PIN verification
@@ -34,11 +81,26 @@ app.use(express.json())
 
 // Verify app PIN → returns access token
 app.post('/api/verify-app-pin', (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'
+
+    // [P1-#2] Rate limit check
+    if (!checkPinRateLimit(ip)) {
+        res.status(429).json({ error: 'Too many attempts. Try again later.' })
+        return
+    }
+
     const { pin } = req.body
-    if (!pin || pin !== APP_PIN) {
+    if (!pin || typeof pin !== 'string') {
         res.status(403).json({ error: 'Invalid PIN' })
         return
     }
+
+    // [P1-#3] Timing-safe comparison
+    if (!safeCompare(pin, APP_PIN)) {
+        res.status(403).json({ error: 'Invalid PIN' })
+        return
+    }
+
     res.json({ accessToken: generateAccessToken() })
 })
 
@@ -71,7 +133,6 @@ interface CustomChannel {
 }
 
 const customChannels = new Map<string, CustomChannel>()
-let customChannelCounter = 100 // start custom channels from 100
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -88,36 +149,50 @@ app.post('/api/token', requireAccess, async (req, res) => {
             return
         }
 
+        // [P3-#18] Server-side username validation
+        const cleanUsername = String(username).trim().slice(0, 20)
+        if (!cleanUsername || !/^[\w\s\-]+$/u.test(cleanUsername)) {
+            res.status(400).json({ error: 'Invalid username (max 20 chars, letters/numbers/spaces)' })
+            return
+        }
+
         // Server-side PIN enforcement for custom channels
         const customChannel = customChannels.get(room)
         if (customChannel && customChannel.pin) {
-            if (!pin || customChannel.pin !== pin) {
+            if (!pin || !safeCompare(String(pin), customChannel.pin)) {
                 res.status(403).json({ error: 'Invalid PIN' })
                 return
             }
         }
 
-        const metadata = JSON.stringify({ deviceId: deviceId || '' })
+        const safeDeviceId = String(deviceId || '').slice(0, 64)
+        const metadata = JSON.stringify({ deviceId: safeDeviceId })
+
+        // [P2-#10] Unique identity using deviceId suffix to prevent collisions
+        const shortDeviceId = safeDeviceId.slice(0, 6) || crypto.randomBytes(3).toString('hex')
+        const identity = `${cleanUsername}-${shortDeviceId}`
 
         const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-            identity: username,
+            identity,
+            name: cleanUsername, // display name stays clean
             metadata,
             ttl: '24h'
         })
 
+        // [P1-#7] Restricted grants — no roomCreate
         token.addGrant({
             room: room,
             roomJoin: true,
             canPublish: true,
             canSubscribe: true,
-            roomCreate: true
+            roomCreate: false
         })
 
         const jwt = await token.toJwt()
 
         res.json({
             token: jwt,
-            livekitUrl: LIVEKIT_URL
+            livekitUrl: LIVEKIT_CLIENT_URL
         })
     } catch (err) {
         console.error('Token generation error:', err)
@@ -145,8 +220,8 @@ app.post('/api/channels', requireAccess, (req, res) => {
             return
         }
 
-        customChannelCounter++
-        const roomName = `custom-${customChannelCounter}`
+        // [P2-#9] Timestamp-based room names to prevent collision on restart
+        const roomName = `custom-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`
 
         const channel: CustomChannel = {
             name: name.trim(),
@@ -160,7 +235,6 @@ app.post('/api/channels', requireAccess, (req, res) => {
         console.log(`📢 Custom channel created: "${channel.name}" (${roomName})${pin ? ' [PIN protected]' : ''}`)
 
         res.json({
-            channel: customChannelCounter,
             name: channel.name,
             roomName,
             hasPin: !!pin
@@ -172,6 +246,7 @@ app.post('/api/channels', requireAccess, (req, res) => {
 })
 
 // Verify channel PIN
+// [P2-#11] Still kept for backwards compat but uses timing-safe compare
 app.post('/api/channels/verify-pin', requireAccess, (req, res) => {
     const { roomName, pin } = req.body
 
@@ -186,7 +261,7 @@ app.post('/api/channels/verify-pin', requireAccess, (req, res) => {
         return
     }
 
-    res.json({ valid: channel.pin === pin })
+    res.json({ valid: safeCompare(String(pin || ''), channel.pin) })
 })
 
 // List rooms with participant counts (default + custom)
@@ -194,8 +269,9 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
     try {
         const defaultChannels = [1, 2, 3, 4, 5]
         const rooms: {
-            channel: number
+            channel?: number
             name: string
+            roomName?: string
             playerCount: number
             hasPin?: boolean
             isCustom?: boolean
@@ -234,8 +310,8 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
             }
 
             rooms.push({
-                channel: parseInt(roomName.split('-')[1]) || 0,
                 name: custom.name,
+                roomName, // send actual roomName for client to connect
                 playerCount: count,
                 hasPin: !!custom.pin,
                 isCustom: true,
@@ -255,6 +331,18 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
         })
     }
 })
+
+// Cleanup: periodically remove expired access tokens
+setInterval(() => {
+    const now = Date.now()
+    for (const [token, entry] of accessTokenStore.entries()) {
+        if (now > entry.expiresAt) accessTokenStore.delete(token)
+    }
+    // Also cleanup old rate limit entries
+    for (const [ip, entry] of pinAttempts.entries()) {
+        if (now - entry.lastAttempt > PIN_RATE_WINDOW) pinAttempts.delete(ip)
+    }
+}, 60 * 60 * 1000) // every hour
 
 app.listen(PORT, () => {
     console.log(`🎮 GamerScream Server running on http://localhost:${PORT}`)
