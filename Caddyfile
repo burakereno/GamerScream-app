@@ -1,0 +1,16 @@
+{$DOMAIN} {
+    # Backend API
+    handle /api/* {
+        reverse_proxy backend:3002
+    }
+
+    # LiveKit WebSocket
+    handle /livekit/* {
+        reverse_proxy livekit:7880
+    }
+
+    # Default — health check redirect
+    handle {
+        respond "GamerScream API is running" 200
+    }
+}
