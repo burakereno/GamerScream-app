@@ -1,0 +1,31 @@
+appId: com.gamerscream.app
+productName: GamerScream
+copyright: Copyright © 2025 GamerScream
+
+directories:
+  output: release
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.social-networking
+  icon: build/ico.icns
+
+win:
+  target:
+    - nsis
+  icon: build/ico.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

@@ -1,0 +1,17 @@
+{
+  "name": "sado-voice",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lightweight party voice chat — pick your devices, set your level, and connect.",
+  "scripts": {
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm --filter desktop build",
+    "server:dev": "pnpm --filter server dev"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

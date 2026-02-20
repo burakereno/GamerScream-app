@@ -1,0 +1,20 @@
+# LiveKit Server Configuration
+# This file is used for both local development and production deployment
+
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+
+keys:
+  devkey: devsecret
+
+logging:
+  level: info
+
+room:
+  auto_create: true
+  empty_timeout: 300     # 5 minutes
+  max_participants: 10

@@ -1,0 +1,32 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    command: --config /etc/livekit.yaml
+    restart: always
+    networks:
+      - sado-network
+
+  backend:
+    build: ./apps/server
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
+      - LIVEKIT_URL=ws://livekit:7880
+    depends_on:
+      - livekit
+    restart: always
+    networks:
+      - sado-network
+
+networks:
+  sado-network:
+    driver: bridge
