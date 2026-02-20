@@ -6,7 +6,7 @@ import { UsernameEntry } from './components/UsernameEntry'
 import { useAudioDevices } from './hooks/useAudioDevices'
 import { useLiveKit } from './hooks/useLiveKit'
 import { useSettings } from './hooks/useSettings'
-import { User } from 'lucide-react'
+import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
@@ -32,6 +32,23 @@ export default function App() {
     // Access token state — checks localStorage on load
     const [accessVerified, setAccessVerified] = useState(false)
     const [checkingAccess, setCheckingAccess] = useState(true)
+
+    // Auto-update state
+    const [updateVersion, setUpdateVersion] = useState<string | null>(null)
+    const [updateReady, setUpdateReady] = useState(false)
+
+    // Listen for auto-update events from main process
+    useEffect(() => {
+        const api = (window as any).electronAPI
+        if (!api?.onUpdateAvailable) return
+        api.onUpdateAvailable((info: { version: string }) => {
+            setUpdateVersion(info.version)
+        })
+        api.onUpdateDownloaded((info: { version: string }) => {
+            setUpdateVersion(info.version)
+            setUpdateReady(true)
+        })
+    }, [])
 
     // On mount: check if stored access token is still valid
     useEffect(() => {
@@ -151,6 +168,25 @@ export default function App() {
     return (
         <div className="app">
             <div className="drag-region" />
+
+            {/* Auto-update banner */}
+            {updateVersion && (
+                <button
+                    className="update-banner no-drag"
+                    onClick={() => {
+                        if (updateReady) {
+                            (window as any).electronAPI?.installUpdate()
+                        }
+                    }}
+                >
+                    <Download size={14} />
+                    {updateReady
+                        ? `v${updateVersion} ready — tap to restart`
+                        : `Downloading v${updateVersion}…`
+                    }
+                </button>
+            )}
+
             <div className="app-header">
                 <img src={logoSvg} alt="GamerScream" className="app-logo" />
             </div>

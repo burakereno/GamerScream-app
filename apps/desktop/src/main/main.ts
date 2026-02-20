@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
 import { join } from 'path'
+import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -27,6 +28,35 @@ function createWindow(): void {
     }
 }
 
+// ── Auto-Update ──
+function setupAutoUpdater(): void {
+    autoUpdater.autoDownload = true
+    autoUpdater.autoInstallOnAppQuit = true
+
+    autoUpdater.on('update-available', (info) => {
+        mainWindow?.webContents.send('update-available', {
+            version: info.version
+        })
+    })
+
+    autoUpdater.on('update-downloaded', (info) => {
+        mainWindow?.webContents.send('update-downloaded', {
+            version: info.version
+        })
+    })
+
+    autoUpdater.on('error', (err) => {
+        console.error('Auto-update error:', err.message)
+    })
+
+    // Check for updates after a short delay
+    setTimeout(() => {
+        autoUpdater.checkForUpdates().catch((err) => {
+            console.error('Update check failed:', err.message)
+        })
+    }, 3000)
+}
+
 app.whenReady().then(() => {
     // Set dock icon on macOS
     if (process.platform === 'darwin' && app.dock) {
@@ -37,6 +67,7 @@ app.whenReady().then(() => {
     }
 
     createWindow()
+    setupAutoUpdater()
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -51,7 +82,11 @@ app.on('window-all-closed', () => {
     }
 })
 
-// IPC: Get audio devices (delegated to renderer, but we expose the API key securely)
+// IPC handlers
 ipcMain.handle('get-server-url', () => {
     return process.env.GAMERSCREAM_SERVER_URL || 'http://localhost:3002'
+})
+
+ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall(false, true)
 })

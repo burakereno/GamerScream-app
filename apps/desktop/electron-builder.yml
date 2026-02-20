@@ -5,9 +5,15 @@ copyright: Copyright © 2025 GamerScream
 directories:
   output: release
 
+publish:
+  provider: github
+  owner: burakereno
+  repo: GamerScream-app
+
 mac:
   target:
     - dmg
+    - zip
   category: public.app-category.social-networking
   icon: build/ico.icns
 

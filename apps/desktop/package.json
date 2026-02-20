@@ -9,6 +9,7 @@
         "preview": "electron-vite preview"
     },
     "dependencies": {
+        "electron-updater": "^6.8.3",
         "livekit-client": "^2.9.1",
         "lucide-react": "^0.575.0"
     },
