@@ -9,9 +9,9 @@ function createWindow(): void {
         height: 720,
         minWidth: 400,
         minHeight: 600,
-        title: 'GamerScream',
         backgroundColor: '#09090b',
-        titleBarStyle: 'default',
+        titleBarStyle: 'hiddenInset',
+        trafficLightPosition: { x: 16, y: 12 },
         icon: join(__dirname, '../../build/icon_512x512@2x@2x.png'),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
@@ -53,5 +53,5 @@ app.on('window-all-closed', () => {
 
 // IPC: Get audio devices (delegated to renderer, but we expose the API key securely)
 ipcMain.handle('get-server-url', () => {
-    return process.env.GAMERSCREAM_SERVER_URL || 'http://localhost:3001'
+    return process.env.GAMERSCREAM_SERVER_URL || 'http://localhost:3002'
 })

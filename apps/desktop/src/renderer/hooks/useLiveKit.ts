@@ -8,7 +8,7 @@ import {
 } from 'livekit-client'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
 
-const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3001'
+const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
 function getAuthHeaders(): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }

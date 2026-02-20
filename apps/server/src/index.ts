@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk'
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3002
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'devkey'
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || 'devsecret'

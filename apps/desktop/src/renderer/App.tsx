@@ -9,7 +9,7 @@ import { useSettings } from './hooks/useSettings'
 import { User } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
-const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3001'
+const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
 
 export default function App() {
@@ -150,6 +150,7 @@ export default function App() {
 
     return (
         <div className="app">
+            <div className="drag-region" />
             <div className="app-header">
                 <img src={logoSvg} alt="GamerScream" className="app-logo" />
             </div>

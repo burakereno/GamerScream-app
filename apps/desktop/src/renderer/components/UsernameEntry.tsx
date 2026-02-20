@@ -39,6 +39,7 @@ export function UsernameEntry({ onSubmit, savedUsername, needsPin, onPinSubmit }
 
     return (
         <div className="username-screen">
+            <div className="drag-region" />
             <div className="username-container">
                 <img src={logoSvg} alt="GamerScream" className="username-logo" />
                 <p className="username-subtitle">Enter your name to get started</p>

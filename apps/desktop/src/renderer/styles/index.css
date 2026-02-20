@@ -57,11 +57,28 @@ body {
 }
 
 /* ============================================
+   DRAG REGION (native title bar replacement)
+   ============================================ */
+.drag-region {
+  -webkit-app-region: drag;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: 100;
+}
+
+.drag-region .no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ============================================
    APP LAYOUT
    ============================================ */
 .app {
   min-height: 100vh;
-  padding: 24px;
+  padding: 52px 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -770,7 +787,7 @@ input[type="range"]:active::-webkit-slider-thumb {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 52px 24px 24px;
   background: var(--bg-primary);
 }
 

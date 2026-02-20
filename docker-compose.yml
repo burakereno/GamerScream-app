@@ -15,9 +15,9 @@ services:
   backend:
     build: ./apps/server
     ports:
-      - "3001:3001"
+      - "3002:3002"
     environment:
-      - PORT=3001
+      - PORT=3002
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - LIVEKIT_URL=ws://livekit:7880
