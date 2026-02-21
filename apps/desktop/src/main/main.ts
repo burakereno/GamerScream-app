@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Notification } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 
@@ -85,4 +85,11 @@ app.on('window-all-closed', () => {
 // IPC handlers
 ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall(false, true)
+})
+
+// Native OS notification — shows even when app is in background
+ipcMain.on('show-notification', (_event, { title, body }: { title: string; body: string }) => {
+    if (Notification.isSupported()) {
+        new Notification({ title, body }).show()
+    }
 })

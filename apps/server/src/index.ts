@@ -16,24 +16,24 @@ const LIVEKIT_CLIENT_URL = process.env.LIVEKIT_CLIENT_URL || LIVEKIT_URL
 const APP_PIN = process.env.APP_PIN || '1520'
 const TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'
 
-// [P1-#4] Per-session access tokens with expiration
-const accessTokenStore = new Map<string, { expiresAt: number }>()
+// [P1-#4] Signed access tokens — survive server restarts
 const ACCESS_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 function generateAccessToken(): string {
-    const token = crypto.randomBytes(32).toString('hex')
-    accessTokenStore.set(token, { expiresAt: Date.now() + ACCESS_TOKEN_TTL })
-    return token
+    const expiresAt = Date.now() + ACCESS_TOKEN_TTL
+    const payload = `${expiresAt}`
+    const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex')
+    return `${payload}.${sig}`
 }
 
 function isValidAccessToken(token: string): boolean {
-    const entry = accessTokenStore.get(token)
-    if (!entry) return false
-    if (Date.now() > entry.expiresAt) {
-        accessTokenStore.delete(token)
-        return false
-    }
-    return true
+    const parts = token.split('.')
+    if (parts.length !== 2) return false
+    const [payload, sig] = parts
+    const expiresAt = parseInt(payload, 10)
+    if (isNaN(expiresAt) || Date.now() > expiresAt) return false
+    const expectedSig = crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex')
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
 }
 
 // [P1-#2] Rate limiting for PIN verification
@@ -66,9 +66,16 @@ function safeCompare(a: string, b: string): boolean {
 
 const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 
-// [P1-#1] Restrictive CORS — only allow Electron app (no browser origin)
+// [P1-#1] Restrictive CORS — allow Electron dev server + packaged app (no origin)
 app.use(cors({
-    origin: false, // Electron requests have no origin header — block browser requests
+    origin: (origin, callback) => {
+        // Packaged Electron app sends no origin — allow
+        if (!origin) return callback(null, true)
+        // Dev mode: allow localhost
+        if (origin.startsWith('http://localhost:')) return callback(null, true)
+        // Block everything else
+        callback(new Error('Not allowed by CORS'))
+    },
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'x-access-token']
 }))
@@ -332,13 +339,9 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
     }
 })
 
-// Cleanup: periodically remove expired access tokens
+// Cleanup: periodically remove old rate limit entries
 setInterval(() => {
     const now = Date.now()
-    for (const [token, entry] of accessTokenStore.entries()) {
-        if (now > entry.expiresAt) accessTokenStore.delete(token)
-    }
-    // Also cleanup old rate limit entries
     for (const [ip, entry] of pinAttempts.entries()) {
         if (now - entry.lastAttempt > PIN_RATE_WINDOW) pinAttempts.delete(ip)
     }

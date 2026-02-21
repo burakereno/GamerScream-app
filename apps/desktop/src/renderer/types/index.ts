@@ -3,6 +3,7 @@ export interface ElectronAPI {
     onUpdateAvailable: (callback: (info: { version: string }) => void) => void
     onUpdateDownloaded: (callback: (info: { version: string }) => void) => void
     installUpdate: () => void
+    showNotification: (title: string, body: string) => void
 }
 
 declare global {

@@ -47,7 +47,12 @@ function getVolumeKey(participant: RemoteParticipant): string {
     return getParticipantDeviceId(participant) || participant.identity
 }
 
-export function useLiveKit() {
+export interface LiveKitCallbacks {
+    onParticipantJoin?: (name: string) => void
+    onParticipantLeave?: (name: string) => void
+}
+
+export function useLiveKit(callbacks?: LiveKitCallbacks) {
     const [isConnected, setIsConnected] = useState(false)
     const [isConnecting, setIsConnecting] = useState(false)
     const [isMuted, setIsMuted] = useState(false)
@@ -213,8 +218,15 @@ export function useLiveKit() {
                     }
                     updatePlayerList(room)
                     fetchChannels()
+                    // Notify: someone joined
+                    callbacks?.onParticipantJoin?.(p.name || p.identity)
                 })
-                room.on(RoomEvent.ParticipantDisconnected, () => { updatePlayerList(room); fetchChannels() })
+                room.on(RoomEvent.ParticipantDisconnected, (p) => {
+                    updatePlayerList(room)
+                    fetchChannels()
+                    // Notify: someone left
+                    callbacks?.onParticipantLeave?.(p.name || p.identity)
+                })
                 room.on(RoomEvent.TrackMuted, () => updatePlayerList(room))
                 room.on(RoomEvent.TrackUnmuted, () => updatePlayerList(room))
                 room.on(RoomEvent.ActiveSpeakersChanged, () => updatePlayerList(room))
