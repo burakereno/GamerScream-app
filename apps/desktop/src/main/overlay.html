@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: transparent;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            -webkit-app-region: no-drag;
+            user-select: none;
+        }
+        .overlay {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 18px;
+            background: rgba(15, 15, 18, 0.92);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            border-radius: 12px;
+            color: #e4e4e7;
+            font-size: 13px;
+            font-weight: 500;
+            backdrop-filter: blur(12px);
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        .overlay.leaving {
+            animation: slideOut 0.3s ease-in forwards;
+        }
+        .icon {
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .name {
+            color: #f97316;
+            font-weight: 600;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay" id="overlay">
+        <span class="icon" id="icon">🎮</span>
+        <span id="message"></span>
+    </div>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const name = params.get('name') || 'Someone';
+        const type = params.get('type') || 'join';
+
+        const icon = document.getElementById('icon');
+        const message = document.getElementById('message');
+        const overlay = document.getElementById('overlay');
+
+        if (type === 'join') {
+            icon.textContent = '🎮';
+            message.innerHTML = `<span class="name">${name}</span> joined`;
+        } else {
+            icon.textContent = '👋';
+            message.innerHTML = `<span class="name">${name}</span> left`;
+        }
+
+        // Auto-dismiss with animation
+        setTimeout(() => {
+            overlay.classList.add('leaving');
+            setTimeout(() => {
+                window.close();
+            }, 300);
+        }, 4700);
+    </script>
+</body>
+</html>

@@ -1,8 +1,59 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Notification, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
+let overlayWindow: BrowserWindow | null = null
+
+// ── Overlay Notification (always-on-top, works over fullscreen games) ──
+function showOverlay(name: string, type: 'join' | 'leave'): void {
+    // Close any existing overlay
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.close()
+        overlayWindow = null
+    }
+
+    const display = screen.getPrimaryDisplay()
+    const { width, height } = display.workAreaSize
+    const overlayWidth = 280
+    const overlayHeight = 60
+
+    overlayWindow = new BrowserWindow({
+        width: overlayWidth,
+        height: overlayHeight,
+        x: width - overlayWidth - 20,
+        y: 20,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        backgroundColor: '#00000000',
+        focusable: false,
+        resizable: false,
+        hasShadow: false,
+        webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false
+        }
+    })
+
+    overlayWindow.setIgnoreMouseEvents(true)
+
+    const overlayPath = app.isPackaged
+        ? join(__dirname, 'overlay.html')
+        : join(__dirname, '../../src/main/overlay.html')
+    overlayWindow.loadFile(overlayPath, {
+        query: { name, type }
+    })
+
+    // Auto-close after 5 seconds
+    setTimeout(() => {
+        if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.close()
+            overlayWindow = null
+        }
+    }, 5000)
+}
 
 function createWindow(): void {
     mainWindow = new BrowserWindow({
@@ -13,7 +64,7 @@ function createWindow(): void {
         backgroundColor: '#09090b',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         trafficLightPosition: { x: 16, y: 12 },
-        autoHideMenuBar: true, // Hide menu bar on Windows
+        autoHideMenuBar: true,
         icon: join(__dirname, '../../build/icon_512x512@2x@2x.png'),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
@@ -22,7 +73,6 @@ function createWindow(): void {
         }
     })
 
-    // Remove menu bar completely on Windows
     if (process.platform !== 'darwin') {
         Menu.setApplicationMenu(null)
     }
@@ -55,7 +105,6 @@ function setupAutoUpdater(): void {
         console.error('Auto-update error:', err.message)
     })
 
-    // Check for updates after a short delay
     setTimeout(() => {
         autoUpdater.checkForUpdates().catch((err) => {
             console.error('Update check failed:', err.message)
@@ -64,7 +113,6 @@ function setupAutoUpdater(): void {
 }
 
 app.whenReady().then(() => {
-    // Set dock icon on macOS
     if (process.platform === 'darwin' && app.dock) {
         const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon_512x512@2x@2x.png'))
         if (!icon.isEmpty()) {
@@ -93,9 +141,10 @@ ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall(false, true)
 })
 
-// Native OS notification — shows even when app is in background
+// Overlay notification — shows over fullscreen games
 ipcMain.on('show-notification', (_event, { title, body }: { title: string; body: string }) => {
-    if (Notification.isSupported()) {
-        new Notification({ title, body }).show()
-    }
+    // Extract name from body like "Burak joined the channel"
+    const name = body.replace(/ (joined|left).*/, '') || title
+    const type = body.includes('left') ? 'leave' : 'join'
+    showOverlay(name, type)
 })

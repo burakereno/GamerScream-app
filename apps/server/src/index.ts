@@ -1,7 +1,13 @@
 import express from 'express'
 import cors from 'cors'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 3002
@@ -13,8 +19,33 @@ const LIVEKIT_HTTP_URL = process.env.LIVEKIT_HTTP_URL || 'http://localhost:7880'
 const LIVEKIT_CLIENT_URL = process.env.LIVEKIT_CLIENT_URL || LIVEKIT_URL
 
 // App-level PIN (server-side only — never sent to client)
-const APP_PIN = process.env.APP_PIN || '1520'
-const TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'
+let APP_PIN = process.env.APP_PIN || '1520'
+let TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'
+
+// Admin secret — MUST be set in environment, no unsafe fallback
+const ADMIN_SECRET = process.env.ADMIN_SECRET
+if (!ADMIN_SECRET) {
+    console.warn('⚠️  ADMIN_SECRET not set — admin panel will be disabled')
+}
+
+// Persist admin state changes to survive server restarts
+const ADMIN_STATE_PATH = path.join(__dirname, '..', 'admin-state.json')
+try {
+    const state = JSON.parse(fs.readFileSync(ADMIN_STATE_PATH, 'utf-8'))
+    if (state.APP_PIN) APP_PIN = state.APP_PIN
+    if (state.TOKEN_SECRET) TOKEN_SECRET = state.TOKEN_SECRET
+    console.log('📁 Loaded admin state from file')
+} catch {
+    // No state file yet — use env defaults
+}
+
+function saveAdminState() {
+    try {
+        fs.writeFileSync(ADMIN_STATE_PATH, JSON.stringify({ APP_PIN, TOKEN_SECRET }, null, 2))
+    } catch (err) {
+        console.error('Failed to save admin state:', err)
+    }
+}
 
 // [P1-#4] Signed access tokens — survive server restarts
 const ACCESS_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -346,6 +377,92 @@ setInterval(() => {
         if (now - entry.lastAttempt > PIN_RATE_WINDOW) pinAttempts.delete(ip)
     }
 }, 60 * 60 * 1000) // every hour
+
+// ============================================
+// Admin routes (protected by ADMIN_SECRET)
+// ============================================
+
+// [AUDIT P1-1] Rate limiting for admin routes
+const adminAttempts = new Map<string, { count: number; lastAttempt: number }>()
+const ADMIN_RATE_LIMIT = 3 // max attempts
+const ADMIN_RATE_WINDOW = 60 * 1000 // per minute
+
+function checkAdminRateLimit(ip: string): boolean {
+    const now = Date.now()
+    const entry = adminAttempts.get(ip)
+    if (!entry || now - entry.lastAttempt > ADMIN_RATE_WINDOW) {
+        adminAttempts.set(ip, { count: 1, lastAttempt: now })
+        return true
+    }
+    if (entry.count >= ADMIN_RATE_LIMIT) return false
+    entry.count++
+    entry.lastAttempt = now
+    return true
+}
+
+// Admin middleware: checks secret + rate limit
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+    // [AUDIT P1-3] Reject if ADMIN_SECRET not configured
+    if (!ADMIN_SECRET) {
+        res.status(503).json({ error: 'Admin panel not configured' })
+        return
+    }
+    // [AUDIT P1-1] Rate limit
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'
+    if (!checkAdminRateLimit(ip)) {
+        res.status(429).json({ error: 'Too many attempts. Try again later.' })
+        return
+    }
+    const { secret } = req.body
+    if (!secret || !safeCompare(String(secret), ADMIN_SECRET)) {
+        res.status(403).json({ error: 'Invalid admin secret' })
+        return
+    }
+    next()
+}
+
+app.post('/api/admin/verify', requireAdmin, (_req, res) => {
+    res.json({ valid: true })
+})
+
+app.post('/api/admin/change-pin', requireAdmin, (req, res) => {
+    const { newPin } = req.body
+    if (!newPin || String(newPin).length < 4) {
+        res.status(400).json({ error: 'PIN must be at least 4 characters' })
+        return
+    }
+    APP_PIN = String(newPin)
+    TOKEN_SECRET = crypto.randomBytes(32).toString('hex')
+    saveAdminState() // [AUDIT P2-4/P2-5] Persist to survive restart
+    console.log('🔑 Admin changed PIN and invalidated all tokens')
+    res.json({ success: true, message: 'PIN changed. All users will need to re-enter the new PIN.' })
+})
+
+app.post('/api/admin/kick-all', requireAdmin, async (_req, res) => {
+    try {
+        const rooms = await roomService.listRooms()
+        let kicked = 0
+        for (const room of rooms) {
+            const participants = await roomService.listParticipants(room.name)
+            for (const p of participants) {
+                await roomService.removeParticipant(room.name, p.identity)
+                kicked++
+            }
+        }
+        console.log(`👢 Admin kicked ${kicked} participants from all rooms`)
+        res.json({ success: true, kicked })
+    } catch (err) {
+        console.error('Kick all error:', err)
+        res.status(500).json({ error: 'Failed to kick participants' })
+    }
+})
+
+app.post('/api/admin/invalidate-tokens', requireAdmin, (_req, res) => {
+    TOKEN_SECRET = crypto.randomBytes(32).toString('hex')
+    saveAdminState() // [AUDIT P2-4/P2-5] Persist to survive restart
+    console.log('🔒 Admin invalidated all access tokens')
+    res.json({ success: true, message: 'All tokens invalidated. Users must re-enter PIN.' })
+})
 
 app.listen(PORT, () => {
     console.log(`🎮 GamerScream Server running on http://localhost:${PORT}`)

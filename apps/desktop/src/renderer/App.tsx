@@ -11,7 +11,9 @@ import { playJoinSound, playLeaveSound } from './utils/sounds'
 import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
-const APP_VERSION = '1.3.0'
+import { AdminPanel } from './components/AdminPanel'
+
+const APP_VERSION = '1.4.0'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -51,6 +53,7 @@ export default function App() {
     // Access token state — checks localStorage on load
     const [accessVerified, setAccessVerified] = useState(false)
     const [checkingAccess, setCheckingAccess] = useState(true)
+    const [showAdmin, setShowAdmin] = useState(false)
 
     // Auto-update state
     const [updateVersion, setUpdateVersion] = useState<string | null>(null)
@@ -286,8 +289,10 @@ export default function App() {
                     </div>
 
                     <div className="settings-version">
-                        <span className="version-badge">v{APP_VERSION}</span>
+                        <span className="version-badge" onDoubleClick={() => setShowAdmin(true)} style={{ cursor: 'default' }}>v{APP_VERSION}</span>
                     </div>
+
+                    {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
                 </div>
             )}
         </div>
