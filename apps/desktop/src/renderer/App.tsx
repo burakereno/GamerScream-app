@@ -3,9 +3,11 @@ import { MicrophoneSelector } from './components/MicrophoneSelector'
 import { SpeakerSelector } from './components/SpeakerSelector'
 import { SessionControls } from './components/SessionControls'
 import { UsernameEntry } from './components/UsernameEntry'
+import { ToastContainer, useToast } from './components/Toast'
 import { useAudioDevices } from './hooks/useAudioDevices'
 import { useLiveKit } from './hooks/useLiveKit'
 import { useSettings } from './hooks/useSettings'
+import { playJoinSound, playLeaveSound } from './utils/sounds'
 import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
@@ -20,11 +22,26 @@ export default function App() {
         microphones, speakers, selectedMic, setSelectedMic,
         selectedSpeaker, setSelectedSpeaker, micLevel, setMicLevel
     } = useAudioDevices()
+
+    const { toasts, addToast } = useToast()
+
     const {
         isConnected, isConnecting, isMuted, allMuted, players, roomName, channels,
         connect, disconnect, toggleMute, toggleMuteAll, setPlayerVolume,
         createChannel, verifyPin
-    } = useLiveKit()
+    } = useLiveKit({
+        onParticipantJoin: (name) => {
+            playJoinSound()
+            addToast(`${name} joined`, 'join')
+            // OS-level native notification
+            window.electronAPI?.showNotification?.('GamerScream', `${name} joined the channel`)
+        },
+        onParticipantLeave: (name) => {
+            playLeaveSound()
+            addToast(`${name} left`, 'leave')
+            window.electronAPI?.showNotification?.('GamerScream', `${name} left the channel`)
+        }
+    })
 
     const [hasEnteredName, setHasEnteredName] = useState(!!settings.username)
     const [connectError, setConnectError] = useState<string | null>(null)
@@ -170,6 +187,7 @@ export default function App() {
     return (
         <div className="app">
             <div className="drag-region" />
+            <ToastContainer toasts={toasts} />
 
             {/* Auto-update banner */}
             {updateVersion && (
@@ -230,6 +248,7 @@ export default function App() {
                         onPlayerVolumeChange={setPlayerVolume}
                         onCreateChannel={createChannel}
                         onVerifyPin={verifyPin}
+                        onClearError={() => setConnectError(null)}
                     />
 
                     {connectError && (

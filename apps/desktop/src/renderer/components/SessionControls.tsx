@@ -22,6 +22,7 @@ interface Props {
     onPlayerVolumeChange: (identity: string, volume: number) => void
     onCreateChannel: (name: string, pin: string, createdBy: string) => Promise<any>
     onVerifyPin: (roomName: string, pin: string) => Promise<boolean>
+    onClearError?: () => void
 }
 
 // [P3-#14] Extracted reusable PlayerList component
@@ -132,7 +133,8 @@ export function SessionControls({
     onAutoConnectChange,
     onPlayerVolumeChange,
     onCreateChannel,
-    onVerifyPin
+    onVerifyPin,
+    onClearError
 }: Props) {
     const [masterVolume, setMasterVolume] = useState(100)
 
@@ -183,14 +185,14 @@ export function SessionControls({
             setPinError('')
             setShowPinDialog(true)
         } else if (ch.isCustom) {
-            // Custom channel without PIN — use roomName from server
+            // Custom channel without PIN — connect directly
             onConnect(ch.roomName || ch.name)
         } else {
-            // Default channel — update setting AND connect
+            // Default channel — just select it, user presses Connect to join
             if (ch.channel !== undefined) {
                 onChannelChange(ch.channel)
+                onClearError?.()
             }
-            onConnect()
         }
     }
 
