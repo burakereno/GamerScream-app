@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Notification, Menu } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 
@@ -11,8 +11,9 @@ function createWindow(): void {
         minWidth: 400,
         minHeight: 600,
         backgroundColor: '#09090b',
-        titleBarStyle: 'hiddenInset',
+        titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         trafficLightPosition: { x: 16, y: 12 },
+        autoHideMenuBar: true, // Hide menu bar on Windows
         icon: join(__dirname, '../../build/icon_512x512@2x@2x.png'),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
@@ -20,6 +21,11 @@ function createWindow(): void {
             nodeIntegration: false
         }
     })
+
+    // Remove menu bar completely on Windows
+    if (process.platform !== 'darwin') {
+        Menu.setApplicationMenu(null)
+    }
 
     if (process.env.ELECTRON_RENDERER_URL) {
         mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)

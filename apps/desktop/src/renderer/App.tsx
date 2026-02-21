@@ -11,7 +11,7 @@ import { playJoinSound, playLeaveSound } from './utils/sounds'
 import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
-const APP_VERSION = '1.1.3'
+const APP_VERSION = '1.1.4'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
