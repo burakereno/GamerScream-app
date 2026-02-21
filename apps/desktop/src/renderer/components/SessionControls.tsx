@@ -209,7 +209,7 @@ export function SessionControls({
     }
 
     return (
-        <div className="card">
+        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h2 className="card-title"><Plug size={14} /> Session</h2>
 
             <div className="controls-row">
@@ -248,16 +248,7 @@ export function SessionControls({
             </div>
 
             {/* Channel list */}
-            <div className="channel-list">
-                {/* Create channel button - at top */}
-                <button
-                    className="create-channel-btn"
-                    onClick={() => { setShowCreateDialog(true); setCreateError(''); setNewChannelName(''); setNewChannelPin('') }}
-                    disabled={isConnected}
-                >
-                    <Plus size={14} />
-                    Create Channel
-                </button>
+            <div className="channel-list" style={{ flex: 1 }}>
 
                 {/* Default channels */}
                 {defaultChannels.map((ch) => {
@@ -338,6 +329,17 @@ export function SessionControls({
                         </div>
                     )
                 })}
+
+                {/* Divider + Create channel button at bottom */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', margin: '8px 0' }} />
+                <button
+                    className="create-channel-btn"
+                    onClick={() => { setShowCreateDialog(true); setCreateError(''); setNewChannelName(''); setNewChannelPin('') }}
+                    disabled={isConnected}
+                >
+                    <Plus size={14} />
+                    Create Channel
+                </button>
             </div>
 
             {/* Create channel dialog */}
