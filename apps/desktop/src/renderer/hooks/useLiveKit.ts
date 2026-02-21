@@ -231,10 +231,23 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
                 room.on(RoomEvent.TrackUnmuted, () => updatePlayerList(room))
                 room.on(RoomEvent.ActiveSpeakersChanged, () => updatePlayerList(room))
                 room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+                    // Attach audio track to DOM so it plays
+                    if (track.kind === Track.Kind.Audio) {
+                        const el = track.attach()
+                        el.id = `audio-${participant.identity}`
+                        document.body.appendChild(el)
+                    }
                     // Apply saved volume to newly subscribed tracks
                     const key = getVolumeKey(participant)
                     const savedVolume = volumeMapRef.current.get(key) ?? 100
                         ; (track as any).setVolume(savedVolume / 100)
+                    updatePlayerList(room)
+                })
+                room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+                    // Clean up audio element
+                    track.detach().forEach((el: HTMLMediaElement) => el.remove())
+                    const existingEl = document.getElementById(`audio-${participant.identity}`)
+                    if (existingEl) existingEl.remove()
                     updatePlayerList(room)
                 })
                 room.on(RoomEvent.Disconnected, () => {
