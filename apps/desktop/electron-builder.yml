@@ -9,6 +9,7 @@ publish:
   provider: github
   owner: burakereno
   repo: GamerScream-app
+  releaseType: release
 
 mac:
   target:
