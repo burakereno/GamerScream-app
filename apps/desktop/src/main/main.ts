@@ -1,67 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeImage, Notification, Menu } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
-import { exec } from 'child_process'
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-
-// Set Windows microphone volume to 100% via WASAPI
-function setWindowsMicVolume(): void {
-    if (process.platform !== 'win32') return
-
-    const scriptPath = join(tmpdir(), 'gamerscream-mic.ps1')
-
-    const psScript = [
-        'Add-Type @"',
-        'using System;',
-        'using System.Runtime.InteropServices;',
-        '',
-        '[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
-        'interface IAudioEndpointVolume {',
-        '    int _0(); int _1(); int _2(); int _3();',
-        '    int SetMasterVolumeLevelScalar(float fLevel, System.Guid pguidEventContext);',
-        '    int _5();',
-        '    int GetMasterVolumeLevelScalar(out float pfLevel);',
-        '    int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, System.Guid pguidEventContext);',
-        '}',
-        '',
-        '[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
-        'interface IMMDevice {',
-        '    int Activate(ref System.Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);',
-        '}',
-        '',
-        '[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
-        'interface IMMDeviceEnumerator {',
-        '    int _0();',
-        '    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);',
-        '}',
-        '',
-        '[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorClass {}',
-        '"@',
-        '',
-        'try {',
-        '    $enumerator = New-Object MMDeviceEnumeratorClass',
-        '    $device = $null',
-        '    [void]$enumerator.GetDefaultAudioEndpoint(1, 1, [ref]$device)',
-        '    $iid = [Guid]"5CDF2C82-841E-4546-9722-0CF74078229A"',
-        '    $volume = $null',
-        '    [void]$device.Activate([ref]$iid, 1, [IntPtr]::Zero, [ref]$volume)',
-        '    [void]$volume.SetMasterVolumeLevelScalar(1.0, [Guid]::Empty)',
-        '    [void]$volume.SetMute($false, [Guid]::Empty)',
-        '} catch {}',
-    ].join('\r\n')
-
-    try {
-        writeFileSync(scriptPath, psScript, 'utf-8')
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`, (err) => {
-            try { unlinkSync(scriptPath) } catch { }
-            if (err) console.warn('Could not set mic volume:', err.message)
-            else console.log('🎤 Windows mic volume set to 100%')
-        })
-    } catch (e) {
-        console.warn('Failed to write mic script:', e)
-    }
-}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -135,7 +74,6 @@ app.whenReady().then(() => {
 
     createWindow()
     setupAutoUpdater()
-    setWindowsMicVolume()
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
