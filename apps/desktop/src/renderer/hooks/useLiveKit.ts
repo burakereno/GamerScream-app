@@ -62,6 +62,8 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
     const [channels, setChannels] = useState<ChannelInfo[]>(defaultChannels)
     const [allMuted, setAllMuted] = useState(false)
     const roomRef = useRef<Room | null>(null)
+    const gainNodeRef = useRef<GainNode | null>(null)
+    const audioContextRef = useRef<AudioContext | null>(null)
 
     // Persist per-device volumes in localStorage
     const VOLUME_STORAGE_KEY = 'gamerscream-player-volumes'
@@ -258,7 +260,36 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
                 })
 
                 await room.connect(livekitUrl, token)
-                await room.localParticipant.setMicrophoneEnabled(true)
+
+                // Capture mic manually with gain control
+                try {
+                    const micConstraints: MediaTrackConstraints = {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: false, // We control gain manually
+                    }
+                    if (micDeviceId) micConstraints.deviceId = { exact: micDeviceId }
+
+                    const micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints })
+                    const ctx = new AudioContext()
+                    const source = ctx.createMediaStreamSource(micStream)
+                    const gainNode = ctx.createGain()
+                    gainNode.gain.value = micLevel / 100
+                    const dest = ctx.createMediaStreamDestination()
+                    source.connect(gainNode).connect(dest)
+
+                    gainNodeRef.current = gainNode
+                    audioContextRef.current = ctx
+
+                    // Publish the gain-processed track
+                    const processedTrack = dest.stream.getAudioTracks()[0]
+                    await room.localParticipant.publishTrack(processedTrack, {
+                        source: Track.Source.Microphone
+                    })
+                } catch (e) {
+                    console.warn('Mic gain pipeline failed, falling back:', e)
+                    await room.localParticipant.setMicrophoneEnabled(true)
+                }
 
                 roomRef.current = room
                 setRoomName(channelName)
@@ -295,6 +326,12 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
         setIsMuted(newMuted)
         updatePlayerList(roomRef.current)
     }, [isMuted, updatePlayerList])
+
+    const setMicGain = useCallback((level: number) => {
+        if (gainNodeRef.current) {
+            gainNodeRef.current.gain.value = level / 100
+        }
+    }, [])
 
     useEffect(() => {
         return () => {
@@ -345,6 +382,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
         setPlayerVolume,
         fetchChannels,
         createChannel,
-        verifyPin
+        verifyPin,
+        setMicGain
     }
 }

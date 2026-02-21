@@ -11,7 +11,7 @@ import { playJoinSound, playLeaveSound } from './utils/sounds'
 import { User, Download } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
-const APP_VERSION = '1.2.0'
+const APP_VERSION = '1.2.1'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -28,7 +28,7 @@ export default function App() {
     const {
         isConnected, isConnecting, isMuted, allMuted, players, roomName, channels,
         connect, disconnect, toggleMute, toggleMuteAll, setPlayerVolume,
-        createChannel, verifyPin
+        createChannel, verifyPin, setMicGain
     } = useLiveKit({
         onParticipantJoin: (name) => {
             playJoinSound()
@@ -165,6 +165,7 @@ export default function App() {
     const handleMicLevelChange = (level: number) => {
         setMicLevel(level)
         updateSetting('micLevel', level)
+        setMicGain(level)
     }
 
     // Show loading while checking access token
