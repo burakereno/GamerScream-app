@@ -192,7 +192,8 @@ export function SessionControls({
             if (ch.channel !== undefined) {
                 onChannelChange(ch.channel)
                 onClearError?.()
-                onConnect()
+                // Pass room name directly — state may not have updated yet
+                onConnect(`ch-${ch.channel}`)
             }
         }
     }

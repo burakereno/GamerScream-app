@@ -27,15 +27,19 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         transparent: true,
         alwaysOnTop: true,
         skipTaskbar: true,
-        backgroundColor: '#00000000',
         focusable: false,
         resizable: false,
         hasShadow: false,
+        // Windows needs 'toolbar' type for transparent overlay to render
+        ...(process.platform === 'win32' ? { type: 'toolbar' as const } : {}),
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false
         }
     })
+
+    // Use highest z-order level so it appears over fullscreen games
+    overlayWindow.setAlwaysOnTop(true, 'screen-saver')
 
     overlayWindow.setIgnoreMouseEvents(true)
 
