@@ -175,26 +175,28 @@ export function SessionControls({
         }
     }
 
-    // [P2-#8] Fixed: clicking default channel now also triggers connect
+    // Track selected custom channel (for Connect button)
+    const [selectedCustomRoom, setSelectedCustomRoom] = useState<{ roomName: string; pin?: string } | null>(null)
+
+    // Channel click = SELECT only, never auto-connect
     const handleChannelClick = (ch: ChannelInfo) => {
         if (isConnected) return
-        if (ch.isCustom && ch.hasPin) {
-            // Show PIN dialog
-            setPendingChannel(ch)
-            setPinInput('')
-            setPinError('')
-            setShowPinDialog(true)
-        } else if (ch.isCustom) {
-            // Custom channel without PIN — connect directly
-            onConnect(ch.roomName || ch.name)
-        } else {
-            // Default channel — select and connect directly
-            if (ch.channel !== undefined) {
-                onChannelChange(ch.channel)
-                onClearError?.()
-                // Pass room name directly — state may not have updated yet
-                onConnect(`ch-${ch.channel}`)
+        if (ch.isCustom) {
+            if (ch.hasPin) {
+                // Show PIN dialog — will store PIN for Connect button
+                setPendingChannel(ch)
+                setPinInput('')
+                setPinError('')
+                setShowPinDialog(true)
+            } else {
+                // Select custom channel (no PIN)
+                setSelectedCustomRoom({ roomName: ch.roomName || ch.name })
             }
+        } else if (ch.channel !== undefined) {
+            // Select default channel
+            onChannelChange(ch.channel)
+            setSelectedCustomRoom(null)
+            onClearError?.()
         }
     }
 
@@ -204,7 +206,8 @@ export function SessionControls({
         const valid = await onVerifyPin(actualRoomName, pinInput)
         if (valid) {
             setShowPinDialog(false)
-            onConnect(actualRoomName, pinInput)
+            // Store verified PIN — user must click Connect to join
+            setSelectedCustomRoom({ roomName: actualRoomName, pin: pinInput })
         } else {
             setPinError('Wrong PIN')
         }
@@ -217,7 +220,16 @@ export function SessionControls({
             <div className="controls-row">
                 <button
                     className={`btn ${isConnected ? 'btn-danger' : 'btn-primary'}`}
-                    onClick={() => isConnected ? onDisconnect() : onConnect()}
+                    onClick={() => {
+                        if (isConnected) {
+                            onDisconnect()
+                        } else if (selectedCustomRoom) {
+                            onConnect(selectedCustomRoom.roomName, selectedCustomRoom.pin)
+                            setSelectedCustomRoom(null)
+                        } else {
+                            onConnect()
+                        }
+                    }}
                     disabled={isConnecting}
                 >
                     {isConnecting ? 'Connecting...' :
@@ -299,10 +311,11 @@ export function SessionControls({
                 {customChannels.map((ch) => {
                     const customRoomName = ch.roomName || ch.name
                     const isCurrent = isConnected && roomName === customRoomName
+                    const isSelected = !isConnected && selectedCustomRoom?.roomName === customRoomName
                     return (
                         <div key={customRoomName} className="channel-item-wrapper">
                             <button
-                                className={`channel-item ${isCurrent ? 'channel-item-connected' : ''}`}
+                                className={`channel-item ${isSelected ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
                             >

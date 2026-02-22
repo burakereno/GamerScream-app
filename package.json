@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "pnpm --filter desktop dev",
     "build": "pnpm --filter desktop build",
-    "server:dev": "pnpm --filter server dev"
+    "server:dev": "pnpm --filter server dev",
+    "prepare": "husky"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
       "esbuild"
     ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }
