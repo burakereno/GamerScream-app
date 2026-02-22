@@ -98,12 +98,13 @@ function safeCompare(a: string, b: string): boolean {
 const roomService = new RoomServiceClient(LIVEKIT_HTTP_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
 
 // [P1-#1] Restrictive CORS — allow Electron dev server + packaged app (no origin)
+const ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:3002']
 app.use(cors({
     origin: (origin, callback) => {
         // Packaged Electron app sends no origin — allow
         if (!origin) return callback(null, true)
-        // Dev mode: allow localhost
-        if (origin.startsWith('http://localhost:')) return callback(null, true)
+        // Dev mode: allow specific ports only
+        if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
         // Block everything else
         callback(new Error('Not allowed by CORS'))
     },
@@ -139,11 +140,19 @@ app.post('/api/verify-app-pin', (req, res) => {
         return
     }
 
+    // [P1-1] Persist admin state on first successful PIN
+    saveAdminState()
     res.json({ accessToken: generateAccessToken() })
 })
 
 // Verify stored access token (for returning users)
+// [P1-4] Rate limited to prevent brute-force
 app.post('/api/verify-access-token', (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'
+    if (!checkPinRateLimit(ip)) {
+        res.status(429).json({ error: 'Too many attempts' })
+        return
+    }
     const { accessToken } = req.body
     res.json({ valid: isValidAccessToken(accessToken || '') })
 })
@@ -232,6 +241,7 @@ app.post('/api/token', requireAccess, async (req, res) => {
             token: jwt,
             livekitUrl: LIVEKIT_CLIENT_URL
         })
+
     } catch (err) {
         console.error('Token generation error:', err)
         res.status(500).json({ error: 'Failed to generate token' })
@@ -265,7 +275,7 @@ app.post('/api/channels', requireAccess, (req, res) => {
             name: name.trim(),
             roomName,
             pin: pin || undefined,
-            createdBy: createdBy || 'unknown',
+            createdBy: String(createdBy || 'unknown').trim().slice(0, 20),
             createdAt: Date.now()
         }
 
@@ -302,61 +312,63 @@ app.post('/api/channels/verify-pin', requireAccess, (req, res) => {
     res.json({ valid: safeCompare(String(pin || ''), channel.pin) })
 })
 
+// Shared room list builder (used by REST API)
+async function buildRoomList() {
+    const defaultChannels = [1, 2, 3, 4, 5]
+    const rooms: {
+        channel?: number
+        name: string
+        roomName?: string
+        playerCount: number
+        hasPin?: boolean
+        isCustom?: boolean
+        createdBy?: string
+    }[] = []
+
+    let livekitRooms: any[] = []
+    try {
+        livekitRooms = await roomService.listRooms()
+    } catch {
+        // LiveKit not available
+    }
+
+    for (const ch of defaultChannels) {
+        const roomName = `ch-${ch}`
+        const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
+        rooms.push({
+            channel: ch,
+            name: roomName,
+            playerCount: lkRoom ? lkRoom.numParticipants : 0
+        })
+    }
+
+    for (const [roomName, custom] of customChannels.entries()) {
+        const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
+        const count = lkRoom ? lkRoom.numParticipants : 0
+
+        if (count === 0 && Date.now() - custom.createdAt > 60000) {
+            customChannels.delete(roomName)
+            console.log(`🗑️ Custom channel auto-deleted: "${custom.name}" (${roomName})`)
+            continue
+        }
+
+        rooms.push({
+            name: custom.name,
+            roomName,
+            playerCount: count,
+            hasPin: !!custom.pin,
+            isCustom: true,
+            createdBy: custom.createdBy
+        })
+    }
+
+    return rooms
+}
+
 // List rooms with participant counts (default + custom)
 app.get('/api/rooms', requireAccess, async (_req, res) => {
     try {
-        const defaultChannels = [1, 2, 3, 4, 5]
-        const rooms: {
-            channel?: number
-            name: string
-            roomName?: string
-            playerCount: number
-            hasPin?: boolean
-            isCustom?: boolean
-            createdBy?: string
-        }[] = []
-
-        // Try to get real room info from LiveKit
-        let livekitRooms: any[] = []
-        try {
-            livekitRooms = await roomService.listRooms()
-        } catch {
-            // LiveKit not available
-        }
-
-        // Default channels
-        for (const ch of defaultChannels) {
-            const roomName = `ch-${ch}`
-            const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
-            rooms.push({
-                channel: ch,
-                name: roomName,
-                playerCount: lkRoom ? lkRoom.numParticipants : 0
-            })
-        }
-
-        // Custom channels — auto-delete empty ones
-        for (const [roomName, custom] of customChannels.entries()) {
-            const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
-            const count = lkRoom ? lkRoom.numParticipants : 0
-
-            // Auto-delete if empty and older than 10 seconds (grace period for creation)
-            if (count === 0 && Date.now() - custom.createdAt > 10000) {
-                customChannels.delete(roomName)
-                console.log(`🗑️ Custom channel auto-deleted: "${custom.name}" (${roomName})`)
-                continue
-            }
-
-            rooms.push({
-                name: custom.name,
-                roomName, // send actual roomName for client to connect
-                playerCount: count,
-                hasPin: !!custom.pin,
-                isCustom: true,
-                createdBy: custom.createdBy
-            })
-        }
-
+        const rooms = await buildRoomList()
         res.json({ rooms })
     } catch (err) {
         console.error('Room listing error:', err)

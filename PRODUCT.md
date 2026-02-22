@@ -33,6 +33,24 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 - All API endpoints protected via `x-access-token` header
 - PIN never exposed to the client — validated server-side only
 
+### Admin Panel
+- **Hidden access**: settings → double-click version number → enter admin secret
+- **Admin secret** stored only in server env (`ADMIN_SECRET`) — never in code or GitHub
+- **Change PIN** — updates PIN + invalidates all tokens (everyone re-enters new PIN)
+- **Kick All Users** — removes all participants from all LiveKit rooms instantly
+- **Invalidate Tokens** — forces everyone to re-enter PIN without changing it
+- All admin actions require **confirmation modal** before executing
+- **Rate limited**: 3 attempts per minute per IP
+- State persisted to `admin-state.json` — survives server restarts
+
+### Overlay Notifications
+- Custom always-on-top `BrowserWindow` overlay (replaces native `Notification`)
+- Visible even during fullscreen games
+- Glassmorphism styling with slide-in/out animation
+- Non-focusable, skip-taskbar, ignores mouse events — won't steal game focus
+- Auto-dismisses after 5 seconds
+- Shows when a user joins or leaves a channel
+
 ### Per-Player Volume Control
 - Individual volume sliders per remote participant (0–100%, step 5)
 - **Master channel volume** slider to adjust all remote players at once
@@ -74,6 +92,8 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | `apps/desktop/src/renderer/types/index.ts` | Shared TypeScript interfaces |
 | `apps/server/src/index.ts` | Express API: token gen, room list, custom channels, PIN verify, access control |
 | `apps/desktop/src/renderer/components/PinEntry.tsx` | PIN entry screen (first launch) |
+| `apps/desktop/src/renderer/components/AdminPanel.tsx` | Admin panel (PIN change, kick, token invalidation) |
+| `apps/desktop/src/main/overlay.html` | Overlay notification window (always-on-top) |
 
 ## API Endpoints (Server)
 
@@ -85,6 +105,10 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | POST | `/api/channels` | Create custom channel (`name`, `pin?`, `createdBy`) |
 | POST | `/api/channels/verify-pin` | Verify PIN for locked channel |
 | POST | `/api/verify-pin` | Verify app-level PIN, return access token |
+| POST | `/api/admin/verify` | Verify admin secret |
+| POST | `/api/admin/change-pin` | Change app PIN + invalidate all tokens |
+| POST | `/api/admin/kick-all` | Remove all participants from all rooms |
+| POST | `/api/admin/invalidate-tokens` | Invalidate all access tokens |
 
 ## Environment Variables
 
@@ -98,6 +122,7 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | `LIVEKIT_CLIENT_URL` | `= LIVEKIT_URL` | LiveKit URL returned to clients (external-facing) |
 | `APP_PIN` | `1520` | App-level PIN for access |
 | `TOKEN_SECRET` | derived | HMAC secret for access tokens |
+| `ADMIN_SECRET` | *(required)* | Admin panel secret — must be set, no fallback |
 
 ## Running Locally
 
@@ -153,3 +178,5 @@ ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo syst
 - [x] ~~Build & distribution (Mac `.dmg` / Windows `.exe`)~~
 - [x] ~~App-level PIN gate~~
 - [x] ~~Production deployment (Oracle Cloud VM)~~
+- [x] ~~Overlay notifications (always-on-top during fullscreen)~~
+- [x] ~~Admin panel (change PIN, kick users, invalidate tokens)~~

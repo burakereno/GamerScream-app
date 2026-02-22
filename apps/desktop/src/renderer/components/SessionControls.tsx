@@ -188,10 +188,11 @@ export function SessionControls({
             // Custom channel without PIN — connect directly
             onConnect(ch.roomName || ch.name)
         } else {
-            // Default channel — just select it, user presses Connect to join
+            // Default channel — select and connect directly
             if (ch.channel !== undefined) {
                 onChannelChange(ch.channel)
                 onClearError?.()
+                onConnect()
             }
         }
     }

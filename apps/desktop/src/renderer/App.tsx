@@ -13,7 +13,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.4.0'
+const APP_VERSION = '1.5.0'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -42,6 +42,12 @@ export default function App() {
             playLeaveSound()
             addToast(`${name} left`, 'leave')
             window.electronAPI?.showNotification?.('GamerScream', `${name} left the channel`)
+        },
+        // [P2-1] Token expired — clear and show PIN screen
+        onAuthExpired: () => {
+            localStorage.removeItem(ACCESS_TOKEN_KEY)
+            window.__gamerScreamAccessToken = undefined
+            setAccessVerified(false)
         }
     })
 
@@ -49,6 +55,13 @@ export default function App() {
     const [connectError, setConnectError] = useState<string | null>(null)
     const autoConnectDone = useRef(false)
     const [activeTab, setActiveTab] = useState<'channels' | 'settings'>('channels')
+
+    // [P3-2] Auto-dismiss error banner after 5 seconds
+    useEffect(() => {
+        if (!connectError) return
+        const t = setTimeout(() => setConnectError(null), 5000)
+        return () => clearTimeout(t)
+    }, [connectError])
 
     // Access token state — checks localStorage on load
     const [accessVerified, setAccessVerified] = useState(false)

@@ -119,9 +119,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                         <input
                             type="text"
                             value={newPin}
-                            onChange={e => setNewPin(e.target.value)}
-                            placeholder="New PIN (min 4 characters)"
+                            onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                            placeholder="New PIN (min 4 digits)"
                             className="admin-input"
+                            maxLength={8}
                         />
                         <button
                             className="admin-action-btn accent"

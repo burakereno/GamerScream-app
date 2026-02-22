@@ -50,6 +50,7 @@ function getVolumeKey(participant: RemoteParticipant): string {
 export interface LiveKitCallbacks {
     onParticipantJoin?: (name: string) => void
     onParticipantLeave?: (name: string) => void
+    onAuthExpired?: () => void
 }
 
 export function useLiveKit(callbacks?: LiveKitCallbacks) {
@@ -64,6 +65,8 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
     const roomRef = useRef<Room | null>(null)
     const gainNodeRef = useRef<GainNode | null>(null)
     const audioContextRef = useRef<AudioContext | null>(null)
+    const callbacksRef = useRef(callbacks)
+    callbacksRef.current = callbacks
 
     // Persist per-device volumes in localStorage
     const VOLUME_STORAGE_KEY = 'gamerscream-player-volumes'
@@ -119,17 +122,34 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
             if (res.ok) {
                 const data = await res.json()
                 setChannels(data.rooms || [])
+            } else if (res.status === 401) {
+                // [P2-1] Token expired — notify parent to show PIN screen
+                callbacksRef.current?.onAuthExpired?.()
             }
         } catch {
             // silently fail
         }
     }, [])
 
-    // Poll channel info periodically
+    // [P2-6] Visibility-aware polling — pause when window is hidden
     useEffect(() => {
         fetchChannels()
-        const interval = setInterval(fetchChannels, 5000)
-        return () => clearInterval(interval)
+        let interval: ReturnType<typeof setInterval> | null = setInterval(fetchChannels, 2000)
+
+        const handleVisibility = () => {
+            if (document.hidden) {
+                if (interval) { clearInterval(interval); interval = null }
+            } else {
+                fetchChannels()
+                if (!interval) interval = setInterval(fetchChannels, 2000)
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibility)
+
+        return () => {
+            if (interval) clearInterval(interval)
+            document.removeEventListener('visibilitychange', handleVisibility)
+        }
     }, [fetchChannels])
 
     const setPlayerVolume = useCallback((identity: string, volume: number) => {
@@ -220,21 +240,22 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
                     }
                     updatePlayerList(room)
                     fetchChannels()
-                    // Notify: someone joined
-                    callbacks?.onParticipantJoin?.(p.name || p.identity)
+                    // [P2-10] Use stable ref for callbacks
+                    callbacksRef.current?.onParticipantJoin?.(p.name || p.identity)
                 })
                 room.on(RoomEvent.ParticipantDisconnected, (p) => {
                     updatePlayerList(room)
                     fetchChannels()
-                    // Notify: someone left
-                    callbacks?.onParticipantLeave?.(p.name || p.identity)
+                    callbacksRef.current?.onParticipantLeave?.(p.name || p.identity)
                 })
                 room.on(RoomEvent.TrackMuted, () => updatePlayerList(room))
                 room.on(RoomEvent.TrackUnmuted, () => updatePlayerList(room))
                 room.on(RoomEvent.ActiveSpeakersChanged, () => updatePlayerList(room))
                 room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-                    // Attach audio track to DOM so it plays
+                    // [P2-7] Remove existing audio element before appending new one
                     if (track.kind === Track.Kind.Audio) {
+                        const existingEl = document.getElementById(`audio-${participant.identity}`)
+                        if (existingEl) existingEl.remove()
                         const el = track.attach()
                         el.id = `audio-${participant.identity}`
                         document.body.appendChild(el)
@@ -311,6 +332,12 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
         if (roomRef.current) {
             await roomRef.current.disconnect()
             roomRef.current = null
+        }
+        // [P2-8] Clean up AudioContext
+        if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => { })
+            audioContextRef.current = null
+            gainNodeRef.current = null
         }
         setIsConnected(false)
         setIsMuted(false)
