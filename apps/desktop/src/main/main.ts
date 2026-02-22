@@ -14,7 +14,7 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
     }
 
     const display = screen.getPrimaryDisplay()
-    const { width, height } = display.workAreaSize
+    const { width } = display.workAreaSize
     const overlayWidth = 280
     const overlayHeight = 60
 
@@ -25,23 +25,30 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         y: 20,
         frame: false,
         transparent: true,
-        alwaysOnTop: true,
         skipTaskbar: true,
         focusable: false,
         resizable: false,
         hasShadow: false,
-        // Windows needs 'toolbar' type for transparent overlay to render
-        ...(process.platform === 'win32' ? { type: 'toolbar' as const } : {}),
+        // '#00000000' = fully transparent background — critical for Windows
+        backgroundColor: '#00000000',
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false
         }
     })
 
-    // Use highest z-order level so it appears over fullscreen games
-    overlayWindow.setAlwaysOnTop(true, 'screen-saver')
-
+    // Ignore mouse events so overlay never steals focus from games
     overlayWindow.setIgnoreMouseEvents(true)
+
+    // Show on all virtual desktops (Windows 10+ & macOS)
+    overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+    // Set highest z-order AFTER window is ready — more reliable on Windows
+    overlayWindow.once('ready-to-show', () => {
+        if (!overlayWindow || overlayWindow.isDestroyed()) return
+        overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+        overlayWindow.showInactive()  // Show without stealing focus
+    })
 
     const overlayPath = app.isPackaged
         ? join(__dirname, 'overlay.html')

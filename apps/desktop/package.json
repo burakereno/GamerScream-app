@@ -1,6 +1,6 @@
 {
     "name": "desktop",
-    "version": "1.5.2",
+    "version": "1.5.3",
     "description": "GamerScream - Desktop Client",
     "main": "out/main/main.js",
     "scripts": {
