@@ -1,6 +1,6 @@
 {
     "name": "server",
-    "version": "1.5.7",
+    "version": "1.6.0",
     "description": "GamerScream - Backend API",
     "type": "module",
     "main": "dist/index.js",

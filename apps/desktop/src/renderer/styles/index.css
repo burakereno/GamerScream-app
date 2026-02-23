@@ -947,6 +947,7 @@ input[type="range"]:active::-webkit-slider-thumb {
   gap: 6px;
   width: 100%;
   padding: 10px;
+  margin-top: 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-sm);

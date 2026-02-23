@@ -345,8 +345,7 @@ export function SessionControls({
                     )
                 })}
 
-                {/* Divider + Create channel button at bottom */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', margin: '8px 0' }} />
+                {/* Create channel button at bottom */}
                 <button
                     className="create-channel-btn"
                     onClick={() => { setShowCreateDialog(true); setCreateError(''); setNewChannelName(''); setNewChannelPin('') }}
