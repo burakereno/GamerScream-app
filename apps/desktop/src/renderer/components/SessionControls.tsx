@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X } from 'lucide-react'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
 
@@ -138,6 +138,20 @@ export function SessionControls({
 }: Props) {
     const [masterVolume, setMasterVolume] = useState(100)
 
+    // Secret channel: triple-click "Session" title
+    const secretClickCount = useRef(0)
+    const secretClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const handleTitleClick = () => {
+        if (isConnected || isConnecting) return
+        secretClickCount.current++
+        if (secretClickTimer.current) clearTimeout(secretClickTimer.current)
+        secretClickTimer.current = setTimeout(() => { secretClickCount.current = 0 }, 1000)
+        if (secretClickCount.current >= 3) {
+            secretClickCount.current = 0
+            onConnect('secret-room')
+        }
+    }
+
     // Create channel dialog
     const [showCreateDialog, setShowCreateDialog] = useState(false)
     const [newChannelName, setNewChannelName] = useState('')
@@ -215,11 +229,11 @@ export function SessionControls({
 
     return (
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <h2 className="card-title"><Plug size={14} /> Session</h2>
+            <h2 className="card-title" onClick={handleTitleClick} style={{ userSelect: 'none' }}><Plug size={14} /> Session</h2>
 
             <div className="controls-row">
                 <button
-                    className={`btn ${isConnected ? 'btn-danger' : 'btn-primary'}`}
+                    className={`btn ${isConnected ? 'btn-disconnect' : 'btn-connect'}`}
                     onClick={() => {
                         if (isConnected) {
                             onDisconnect()
@@ -354,6 +368,18 @@ export function SessionControls({
                     <Plus size={14} />
                     Create Channel
                 </button>
+
+                {/* Secret room player list */}
+                {isConnected && roomName === 'secret-room' && players.length > 0 && (
+                    <PlayerList
+                        players={players}
+                        masterVolume={masterVolume}
+                        allMuted={allMuted}
+                        onMasterVolumeChange={setMasterVolume}
+                        onToggleMuteAll={onToggleMuteAll}
+                        onPlayerVolumeChange={onPlayerVolumeChange}
+                    />
+                )}
             </div>
 
             {/* Create channel dialog */}
