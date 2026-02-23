@@ -17,12 +17,13 @@ mac:
     - zip
   category: public.app-category.social-networking
   icon: build/ico.icns
+  artifactName: ${productName}.${ext}
 
 win:
   target:
     - nsis
   icon: build/ico.ico
-  artifactName: ${productName}-Setup-${version}.${ext}
+  artifactName: ${productName}-Setup.${ext}
 
 nsis:
   oneClick: true
