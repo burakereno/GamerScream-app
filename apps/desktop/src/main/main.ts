@@ -30,9 +30,7 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         focusable: false,
         resizable: false,
         hasShadow: false,
-        // '#00000000' = fully transparent background — critical for Windows
         backgroundColor: '#00000000',
-        // Windows needs these for reliable transparent rendering
         ...(process.platform === 'win32' ? { type: 'toolbar' as const, roundedCorners: false } : {}),
         webPreferences: {
             contextIsolation: true,
@@ -40,25 +38,34 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         }
     })
 
-    // Ignore mouse events so overlay never steals focus from games
     overlayWindow.setIgnoreMouseEvents(true)
-
-    // Show on all virtual desktops (Windows 10+ & macOS)
     overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-    // Set highest z-order AFTER window is ready — more reliable on Windows
     overlayWindow.once('ready-to-show', () => {
         if (!overlayWindow || overlayWindow.isDestroyed()) return
         overlayWindow.setAlwaysOnTop(true, 'pop-up-menu')
-        overlayWindow.showInactive()  // Show without stealing focus
+        overlayWindow.showInactive()
     })
 
-    const overlayPath = app.isPackaged
-        ? join(__dirname, 'overlay.html')
-        : join(__dirname, '../../src/main/overlay.html')
-    overlayWindow.loadFile(overlayPath, {
-        query: { name, type }
-    })
+    // Inline HTML — no external file dependency (fixes production build)
+    const icon = type === 'join' ? '🎮' : '👋'
+    const action = type === 'join' ? 'joined' : 'left'
+    const safeName = name.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c))
+    const html = `<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-app-region:no-drag;user-select:none}
+.overlay{display:flex;align-items:center;gap:10px;padding:12px 18px;background:rgba(15,15,18,0.95);border:1px solid rgba(249,115,22,0.3);border-radius:12px;color:#e4e4e7;font-size:13px;font-weight:500;animation:slideIn .3s ease-out;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.overlay.leaving{animation:slideOut .3s ease-in forwards}
+.icon{font-size:16px;flex-shrink:0}
+.name{color:#f97316;font-weight:600}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
+</style></head><body>
+<div class="overlay" id="overlay"><span class="icon">${icon}</span><span><span class="name">${safeName}</span> ${action}</span></div>
+<script>setTimeout(()=>{document.getElementById('overlay').classList.add('leaving');setTimeout(()=>window.close(),300)},4700)</script>
+</body></html>`
+
+    overlayWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 
     // Auto-close after 5 seconds
     setTimeout(() => {
