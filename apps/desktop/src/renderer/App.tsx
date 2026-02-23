@@ -13,7 +13,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.5.4'
+const APP_VERSION = '1.5.5'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -107,7 +107,12 @@ export default function App() {
                     localStorage.removeItem(ACCESS_TOKEN_KEY)
                 }
             })
-            .catch(() => { /* offline — let them try */ })
+            .catch(() => {
+                // Server unreachable — trust the stored token
+                // Individual API calls will reject with 401 if token is invalid
+                setAccessVerified(true)
+                window.__gamerScreamAccessToken = stored
+            })
             .finally(() => setCheckingAccess(false))
     }, [])
 

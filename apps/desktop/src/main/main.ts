@@ -25,12 +25,15 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         y: 20,
         frame: false,
         transparent: true,
+        show: false,
         skipTaskbar: true,
         focusable: false,
         resizable: false,
         hasShadow: false,
         // '#00000000' = fully transparent background — critical for Windows
         backgroundColor: '#00000000',
+        // Windows needs these for reliable transparent rendering
+        ...(process.platform === 'win32' ? { type: 'toolbar' as const, roundedCorners: false } : {}),
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false
@@ -46,7 +49,7 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
     // Set highest z-order AFTER window is ready — more reliable on Windows
     overlayWindow.once('ready-to-show', () => {
         if (!overlayWindow || overlayWindow.isDestroyed()) return
-        overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+        overlayWindow.setAlwaysOnTop(true, 'pop-up-menu')
         overlayWindow.showInactive()  // Show without stealing focus
     })
 
