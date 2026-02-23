@@ -53,7 +53,7 @@ export interface LiveKitCallbacks {
     onAuthExpired?: () => void
 }
 
-export function useLiveKit(callbacks?: LiveKitCallbacks) {
+export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true) {
     const [isConnected, setIsConnected] = useState(false)
     const [isConnecting, setIsConnecting] = useState(false)
     const [isMuted, setIsMuted] = useState(false)
@@ -115,6 +115,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
 
     // Fetch channel info (player counts) from server
     const fetchChannels = useCallback(async () => {
+        if (!enabled) return
         try {
             const res = await fetch(`${SERVER_URL}/api/rooms`, {
                 headers: getAuthHeaders()
@@ -129,10 +130,12 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
         } catch {
             // silently fail
         }
-    }, [])
+    }, [enabled])
 
     // [P2-6] Visibility-aware polling — pause when window is hidden
+    // Only start polling when enabled (accessVerified) to prevent race condition
     useEffect(() => {
+        if (!enabled) return
         fetchChannels()
         let interval: ReturnType<typeof setInterval> | null = setInterval(fetchChannels, 2000)
 
@@ -150,7 +153,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks) {
             if (interval) clearInterval(interval)
             document.removeEventListener('visibilitychange', handleVisibility)
         }
-    }, [fetchChannels])
+    }, [fetchChannels, enabled])
 
     const setPlayerVolume = useCallback((identity: string, volume: number) => {
         // Find the remote participant to get their device ID

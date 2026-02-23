@@ -13,7 +13,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.5.6'
+const APP_VERSION = '1.5.7'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -26,6 +26,11 @@ export default function App() {
     } = useAudioDevices()
 
     const { toasts, addToast } = useToast()
+
+    // Access token state — MUST be declared before useLiveKit to gate polling
+    const [accessVerified, setAccessVerified] = useState(false)
+    const [checkingAccess, setCheckingAccess] = useState(true)
+    const [showAdmin, setShowAdmin] = useState(false)
 
     const {
         isConnected, isConnecting, isMuted, allMuted, players, roomName, channels,
@@ -49,7 +54,7 @@ export default function App() {
             window.__gamerScreamAccessToken = undefined
             setAccessVerified(false)
         }
-    })
+    }, accessVerified)  // ← Gate polling on accessVerified
 
     const [hasEnteredName, setHasEnteredName] = useState(!!settings.username)
     const [connectError, setConnectError] = useState<string | null>(null)
@@ -62,11 +67,6 @@ export default function App() {
         const t = setTimeout(() => setConnectError(null), 5000)
         return () => clearTimeout(t)
     }, [connectError])
-
-    // Access token state — checks localStorage on load
-    const [accessVerified, setAccessVerified] = useState(false)
-    const [checkingAccess, setCheckingAccess] = useState(true)
-    const [showAdmin, setShowAdmin] = useState(false)
 
     // Auto-update state
     const [updateVersion, setUpdateVersion] = useState<string | null>(null)

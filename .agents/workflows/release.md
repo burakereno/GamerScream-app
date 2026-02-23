@@ -28,12 +28,15 @@ apps/server/package.json           → "version": "NEW_VERSION"
 apps/desktop/src/renderer/App.tsx  → const APP_VERSION = 'NEW_VERSION'
 ```
 
-### 3. Update web download links
+### 3. Web download links — NO ACTION NEEDED
 
-In the web project at `/Users/burakerenoglu/Documents/Gemini/GamerScream-web/app/page.tsx`, update the download URLs:
-
-- Mac link: `GamerScream-OLD_VERSION-arm64.dmg` → `GamerScream-NEW_VERSION-arm64.dmg`
-- Windows link: `GamerScream-Setup-OLD_VERSION.exe` → `GamerScream-Setup-NEW_VERSION.exe`
+> **IMPORTANT:** Web download links use fixed artifact names without version numbers.
+> They point to `/releases/latest/download/GamerScream.dmg` and `/releases/latest/download/GamerScream-Setup.exe`.
+> These URLs auto-resolve to the latest release. **Do NOT manually update download links in the web repo.**
+>
+> The artifact names are defined in `electron-builder.yml`:
+> - Mac: `artifactName: ${productName}.${ext}` → `GamerScream.dmg`
+> - Windows: `artifactName: ${productName}-Setup.${ext}` → `GamerScream-Setup.exe`
 
 ### 4. Build and verify server (if server code changed)
 
@@ -48,9 +51,8 @@ scp -i /Users/burakerenoglu/Documents/Gemini/GamerScream/apps/desktop/build/ssh-
 ssh -i /Users/burakerenoglu/Documents/Gemini/GamerScream/apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo systemctl restart gamerscream && sleep 2 && curl -s http://localhost:3002/api/health"
 ```
 
-### 5. Commit, tag, and push BOTH repos
+### 5. Commit, tag, and push
 
-**App repo:**
 ```bash
 cd /Users/burakerenoglu/Documents/Gemini/GamerScream
 git add -A
@@ -59,28 +61,20 @@ git tag v${NEW_VERSION}
 git push origin main --tags
 ```
 
-**Web repo:**
-```bash
-cd /Users/burakerenoglu/Documents/Gemini/GamerScream-web
-git add -A
-git commit -m "update download links to v${NEW_VERSION}"
-git push origin main
-```
-
-### 5. Verify GitHub Actions
+### 6. Verify GitHub Actions
 
 - The push with the `v*` tag triggers the `Build & Release` workflow
 - This builds Mac (`.dmg`) and Windows (`.exe`) installers
 - The built files are automatically uploaded as a new GitHub Release
-- Web download links point to `/releases/latest` so they auto-update — no changes needed
+- Web download links auto-resolve to the latest release — no web repo changes needed
 
-### 6. Server deployment reminder
+### 7. Server deployment reminder
 
 If server changes were made, remind the user:
-- Production server at `144.24.183.24` was updated in Step 3
+- Production server at `144.24.183.24` was updated in Step 4
 - Verify with: `curl -s https://gamerscream.burakereno.com/api/health`
 
-### 7. Report to user
+### 8. Report to user
 
 List what was done:
 - Old version → New version
