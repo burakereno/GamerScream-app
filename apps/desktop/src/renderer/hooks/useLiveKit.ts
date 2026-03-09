@@ -332,6 +332,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                             })
                             rnnoiseNodeRef.current = rnnoiseNode
 
+                            // Compensate for RNNoise volume reduction
+                            const compensationGain = ctx.createGain()
+                            compensationGain.gain.value = 1.5
+
                             // Wet path (noise-suppressed)
                             const wetGain = ctx.createGain()
                             wetGain.gain.value = noiseSuppression / 100
@@ -345,7 +349,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                             // Merger to combine wet + dry
                             const merger = ctx.createGain()
 
-                            source.connect(rnnoiseNode).connect(wetGain).connect(merger)
+                            source.connect(rnnoiseNode).connect(compensationGain).connect(wetGain).connect(merger)
                             source.connect(dryGain).connect(merger)
                             merger.connect(gainNode).connect(dest)
 
