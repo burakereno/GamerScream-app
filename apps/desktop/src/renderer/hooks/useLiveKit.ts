@@ -313,7 +313,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     const source = ctx.createMediaStreamSource(micStream)
                     const gainNode = ctx.createGain()
                     gainNode.gain.value = micLevel / 100
+                    // Force mono pipeline — RNNoise outputs mono, stereo dest causes left-only audio
                     const dest = ctx.createMediaStreamDestination()
+                    dest.channelCount = 1
+                    dest.channelCountMode = 'explicit'
 
                     if (noiseSuppression > 0) {
                         // Build wet/dry mix pipeline with RNNoise
