@@ -8,12 +8,12 @@ import { useAudioDevices } from './hooks/useAudioDevices'
 import { useLiveKit } from './hooks/useLiveKit'
 import { useSettings } from './hooks/useSettings'
 import { playJoinSound, playLeaveSound } from './utils/sounds'
-import { User, Download } from 'lucide-react'
+import { User, Download, ShieldCheck } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.6.5'
+const APP_VERSION = '1.7.0'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -34,8 +34,8 @@ export default function App() {
 
     const {
         isConnected, isConnecting, isMuted, allMuted, players, roomName, channels,
-        connect, disconnect, toggleMute, toggleMuteAll, setPlayerVolume,
-        createChannel, verifyPin, setMicGain
+        rnnoiseActive, connect, disconnect, toggleMute, toggleMuteAll, setPlayerVolume,
+        createChannel, verifyPin, setMicGain, setNoiseSuppressionLevel
     } = useLiveKit({
         onParticipantJoin: (name) => {
             playJoinSound()
@@ -153,7 +153,7 @@ export default function App() {
     useEffect(() => {
         if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !autoConnectDone.current) {
             autoConnectDone.current = true
-            connect(settings.username, settings.channel, selectedMic, micLevel).catch((err) => {
+            connect(settings.username, settings.channel, selectedMic, micLevel, undefined, undefined, settings.noiseSuppression).catch((err) => {
                 setConnectError(err instanceof Error ? err.message : 'Auto-connect failed')
             })
         }
@@ -167,11 +167,11 @@ export default function App() {
     const handleConnect = useCallback(async (customRoomName?: string, pin?: string) => {
         setConnectError(null)
         try {
-            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin)
+            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin, settings.noiseSuppression)
         } catch (err) {
             setConnectError(err instanceof Error ? err.message : 'Connection failed')
         }
-    }, [connect, settings.username, settings.channel, selectedMic, micLevel])
+    }, [connect, settings.username, settings.channel, selectedMic, micLevel, settings.noiseSuppression])
 
     const handleMicSelect = (deviceId: string) => {
         setSelectedMic(deviceId)
@@ -188,6 +188,29 @@ export default function App() {
         updateSetting('micLevel', level)
         setMicGain(level)
     }
+
+    const handleNoiseSuppressionChange = (level: number) => {
+        updateSetting('noiseSuppression', level)
+        setNoiseSuppressionLevel(level)
+        // [AUDIT-6] Warn user if pipeline might need reconnect
+        if (isConnected && !wetGainActive(level)) {
+            addToast('Full effect requires reconnect', 'leave')
+        }
+    }
+
+    // Check if wet/dry gain nodes are available for real-time adjustment
+    const wetGainActive = (level: number) => {
+        // If rnnoiseActive is true, slider changes apply in real-time
+        // If rnnoiseActive is false or null, changes only take effect on reconnect
+        return rnnoiseActive === true && level > 0
+    }
+
+    // [AUDIT-5] Notify user when RNNoise initialization fails
+    useEffect(() => {
+        if (rnnoiseActive === false) {
+            addToast('Noise suppression unavailable — using basic filter', 'leave')
+        }
+    }, [rnnoiseActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Show loading while checking access token
     if (checkingAccess) {
@@ -294,6 +317,34 @@ export default function App() {
                         selectedSpeaker={selectedSpeaker}
                         onSelect={handleSpeakerSelect}
                     />
+
+                    <div className="card">
+                        <div className="card-title"><ShieldCheck size={14} /> Noise Suppression</div>
+                        <div className="settings-row" style={{ flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step={5}
+                                    value={settings.noiseSuppression}
+                                    onChange={(e) => handleNoiseSuppressionChange(Number(e.target.value))}
+                                    className="player-volume-slider"
+                                    style={{
+                                        flex: 1,
+                                        background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${settings.noiseSuppression}%, var(--bg-primary) ${settings.noiseSuppression}%, var(--bg-primary) 100%)`
+                                    }}
+                                />
+                                <span className="settings-value" style={{ minWidth: 40, textAlign: 'right' }}>{settings.noiseSuppression}%</span>
+                            </div>
+                            <span className="settings-hint">
+                                {settings.noiseSuppression === 0 ? 'Off — no filtering' :
+                                    settings.noiseSuppression < 50 ? 'Low — light background noise reduction' :
+                                        settings.noiseSuppression < 80 ? 'Medium — balanced noise reduction' :
+                                            'High — aggressive noise cancellation'}
+                            </span>
+                        </div>
+                    </div>
 
                     <div className="card">
                         <div className="card-title"><User size={14} /> Account</div>

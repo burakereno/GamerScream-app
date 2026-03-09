@@ -78,9 +78,9 @@ body{background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSy
 
 function createWindow(): void {
     mainWindow = new BrowserWindow({
-        width: 480,
-        height: 820,
-        minWidth: 400,
+        width: 500,
+        height: 840,
+        minWidth: 480,
         minHeight: 600,
         backgroundColor: '#09090b',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',

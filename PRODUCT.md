@@ -173,7 +173,7 @@ ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo syst
 ## Upcoming / TODO
 
 - [ ] Push-to-talk mode
-- [ ] Noise suppression (Krisp-style)
+- [x] ~~Noise suppression (Krisp-style, RNNoise WASM)~~
 - [ ] DuckDNS cron job for dynamic IP updates
 - [x] ~~Build & distribution (Mac `.dmg` / Windows `.exe`)~~
 - [x] ~~App-level PIN gate~~

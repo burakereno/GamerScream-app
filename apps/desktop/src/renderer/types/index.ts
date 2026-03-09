@@ -44,4 +44,5 @@ export interface AppSettings {
     micLevel: number
     channel: number
     autoConnect: boolean
+    noiseSuppression: number // 0-100, noise suppression strength (wet/dry mix)
 }

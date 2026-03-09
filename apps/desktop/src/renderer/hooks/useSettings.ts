@@ -9,7 +9,8 @@ const defaultSettings: AppSettings = {
     speakerId: '',
     micLevel: 100,
     channel: 1,
-    autoConnect: false
+    autoConnect: false,
+    noiseSuppression: 100
 }
 
 export function useSettings() {

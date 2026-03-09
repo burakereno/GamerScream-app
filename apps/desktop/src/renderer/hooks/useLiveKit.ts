@@ -6,6 +6,13 @@ import {
     RemoteParticipant,
     RemoteTrackPublication
 } from 'livekit-client'
+import {
+    RnnoiseWorkletNode,
+    loadRnnoise
+} from '@sapphi-red/web-noise-suppressor'
+import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'
+import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'
+import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
@@ -65,6 +72,11 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     const roomRef = useRef<Room | null>(null)
     const gainNodeRef = useRef<GainNode | null>(null)
     const audioContextRef = useRef<AudioContext | null>(null)
+    const micStreamRef = useRef<MediaStream | null>(null)
+    const rnnoiseNodeRef = useRef<RnnoiseWorkletNode | null>(null)
+    const wetGainRef = useRef<GainNode | null>(null)
+    const dryGainRef = useRef<GainNode | null>(null)
+    const [rnnoiseActive, setRnnoiseActive] = useState<boolean | null>(null) // null=not tried, true=active, false=failed
     const callbacksRef = useRef(callbacks)
     callbacksRef.current = callbacks
 
@@ -205,7 +217,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     }, [allMuted, updatePlayerList])
 
     const connect = useCallback(
-        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string) => {
+        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100) => {
             if (roomRef.current) {
                 await roomRef.current.disconnect()
             }
@@ -285,27 +297,71 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
                 await room.connect(livekitUrl, token)
 
-                // Capture mic manually with gain control
+                // Capture mic manually with gain control + noise suppression
                 try {
                     const micConstraints: MediaTrackConstraints = {
                         echoCancellation: true,
-                        noiseSuppression: true,
+                        noiseSuppression: noiseSuppression === 0, // Use browser builtin when RNNoise is off
                         autoGainControl: false, // We control gain manually
+                        sampleRate: { ideal: 48000 } as any, // RNNoise prefers 48kHz, ideal allows fallback
                     }
                     if (micDeviceId) micConstraints.deviceId = { exact: micDeviceId }
 
                     const micStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints })
-                    const ctx = new AudioContext()
+                    micStreamRef.current = micStream // Store for cleanup
+                    const ctx = new AudioContext({ sampleRate: 48000 })
                     const source = ctx.createMediaStreamSource(micStream)
                     const gainNode = ctx.createGain()
                     gainNode.gain.value = micLevel / 100
                     const dest = ctx.createMediaStreamDestination()
-                    source.connect(gainNode).connect(dest)
+
+                    if (noiseSuppression > 0) {
+                        // Build wet/dry mix pipeline with RNNoise
+                        try {
+                            await ctx.audioWorklet.addModule(rnnoiseWorkletUrl)
+                            const wasmBinary = await loadRnnoise({
+                                url: rnnoiseWasmUrl,
+                                simdUrl: rnnoiseSimdWasmUrl
+                            })
+                            const rnnoiseNode = new RnnoiseWorkletNode(ctx, {
+                                maxChannels: 1,
+                                wasmBinary
+                            })
+                            rnnoiseNodeRef.current = rnnoiseNode
+
+                            // Wet path (noise-suppressed)
+                            const wetGain = ctx.createGain()
+                            wetGain.gain.value = noiseSuppression / 100
+                            wetGainRef.current = wetGain
+
+                            // Dry path (original)
+                            const dryGain = ctx.createGain()
+                            dryGain.gain.value = 1 - (noiseSuppression / 100)
+                            dryGainRef.current = dryGain
+
+                            // Merger to combine wet + dry
+                            const merger = ctx.createGain()
+
+                            source.connect(rnnoiseNode).connect(wetGain).connect(merger)
+                            source.connect(dryGain).connect(merger)
+                            merger.connect(gainNode).connect(dest)
+
+                            setRnnoiseActive(true)
+                            console.log(`RNNoise enabled at ${noiseSuppression}%`)
+                        } catch (rnnoiseErr) {
+                            console.warn('RNNoise init failed, using basic pipeline:', rnnoiseErr)
+                            setRnnoiseActive(false)
+                            source.connect(gainNode).connect(dest)
+                        }
+                    } else {
+                        // No noise suppression — basic pipeline
+                        source.connect(gainNode).connect(dest)
+                    }
 
                     gainNodeRef.current = gainNode
                     audioContextRef.current = ctx
 
-                    // Publish the gain-processed track
+                    // Publish the processed track
                     const processedTrack = dest.stream.getAudioTracks()[0]
                     await room.localParticipant.publishTrack(processedTrack, {
                         source: Track.Source.Microphone
@@ -336,12 +392,25 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
             await roomRef.current.disconnect()
             roomRef.current = null
         }
+        // Clean up RNNoise node
+        if (rnnoiseNodeRef.current) {
+            rnnoiseNodeRef.current.destroy()
+            rnnoiseNodeRef.current = null
+        }
+        wetGainRef.current = null
+        dryGainRef.current = null
+        // [AUDIT-3] Stop mic stream tracks to release microphone
+        if (micStreamRef.current) {
+            micStreamRef.current.getTracks().forEach(t => t.stop())
+            micStreamRef.current = null
+        }
         // [P2-8] Clean up AudioContext
         if (audioContextRef.current) {
             audioContextRef.current.close().catch(() => { })
             audioContextRef.current = null
             gainNodeRef.current = null
         }
+        setRnnoiseActive(null)
         setIsConnected(false)
         setIsMuted(false)
         setPlayers([])
@@ -360,6 +429,14 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     const setMicGain = useCallback((level: number) => {
         if (gainNodeRef.current) {
             gainNodeRef.current.gain.value = level / 100
+        }
+    }, [])
+
+    // Adjust noise suppression wet/dry mix in real-time
+    const setNoiseSuppressionLevel = useCallback((level: number) => {
+        if (wetGainRef.current && dryGainRef.current) {
+            wetGainRef.current.gain.value = level / 100
+            dryGainRef.current.gain.value = 1 - (level / 100)
         }
     }, [])
 
@@ -405,6 +482,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         players,
         roomName,
         channels,
+        rnnoiseActive,
         connect,
         disconnect,
         toggleMute,
@@ -413,6 +491,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         fetchChannels,
         createChannel,
         verifyPin,
-        setMicGain
+        setMicGain,
+        setNoiseSuppressionLevel
     }
 }

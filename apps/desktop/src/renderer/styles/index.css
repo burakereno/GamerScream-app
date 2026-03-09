@@ -231,6 +231,12 @@ body {
   background: rgba(249, 115, 22, 0.04);
 }
 
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .settings-version {
   text-align: center;
   padding-top: 8px;
