@@ -38,27 +38,48 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* Hide all scrollbars globally */
+*::-webkit-scrollbar {
+  display: none;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 /* ============================================
-   DRAG REGION (native title bar replacement)
+   GLOBAL SLIDER — all input[type=range] styled the same
    ============================================ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  background: var(--bg-input);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-secondary);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Default drag region: top bar only (used on UsernameEntry, AdminPanel etc.) */
 .drag-region {
   -webkit-app-region: drag;
   position: fixed;
@@ -66,10 +87,23 @@ body {
   left: 0;
   right: 0;
   height: 48px;
-  z-index: 100;
+  z-index: 1;
 }
 
 .drag-region .no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Inside sticky-header: the header itself is the drag region */
+.sticky-header {
+  -webkit-app-region: drag;
+}
+
+/* Ensure interactive content sits above drag region */
+.sticky-header .segmented-control,
+.sticky-header .update-banner {
+  position: relative;
+  z-index: 2;
   -webkit-app-region: no-drag;
 }
 
@@ -115,11 +149,37 @@ body {
    APP LAYOUT
    ============================================ */
 .app {
-  min-height: 100vh;
-  padding: 52px 24px 24px;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Sticky header: logo + tabs stay fixed at top */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(17, 17, 17, 0.82);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  padding: 12px 0 12px;
+  margin: 0 -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* macOS: extra top padding for traffic light buttons */
+@supports (-webkit-app-region: drag) {
+  .sticky-header {
+    padding-top: 40px;
+  }
 }
 
 .app-header {
@@ -127,7 +187,7 @@ body {
 }
 
 .app-logo {
-  height: 28px;
+  height: 20px;
   width: auto;
   display: block;
   filter: drop-shadow(0 2px 8px rgba(249, 115, 22, 0.15));
@@ -183,6 +243,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
+}
+
+.settings-tab::-webkit-scrollbar {
+  display: none;
+  /* Chrome/Safari/Electron */
 }
 
 .settings-row {
@@ -231,10 +300,108 @@ body {
   background: rgba(249, 115, 22, 0.04);
 }
 
+/* Join Sound Grid */
+.join-sound-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.join-sound-btn {
+  padding: 8px 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.join-sound-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+.join-sound-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 .settings-hint {
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 400;
+}
+
+/* Push-to-Talk mode buttons */
+.ptt-mode-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ptt-mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ptt-mode-btn:not(.active):hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.ptt-keybind-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 60px;
+  text-align: center;
+}
+
+.ptt-keybind-btn:hover {
+  border-color: var(--accent);
+}
+
+.ptt-keybind-btn.recording {
+  border-color: var(--accent);
+  background: rgba(249, 115, 22, 0.1);
+  color: var(--accent);
+  animation: pulse-border 1s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+
+  0%,
+  100% {
+    border-color: var(--accent);
+  }
+
+  50% {
+    border-color: rgba(249, 115, 22, 0.3);
+  }
 }
 
 .settings-version {
@@ -497,6 +664,35 @@ input[type="range"]:active::-webkit-slider-thumb {
   margin-bottom: 16px;
 }
 
+/* Mute button tooltip */
+.mute-btn-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.mute-btn-wrapper.has-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  border: 1px solid var(--border);
+  z-index: 10;
+}
+
+.mute-btn-wrapper.has-tooltip:hover::after {
+  opacity: 1;
+}
+
 .controls-spacer {
   flex: 1;
 }
@@ -719,14 +915,85 @@ input[type="range"]:active::-webkit-slider-thumb {
   box-shadow: 0 0 6px var(--success-glow);
 }
 
-.player-dot.speaking {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
 .player-dot.muted {
   background: var(--text-muted);
+}
+
+/* Soundwave animation for speaking */
+.soundwave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.soundwave span {
+  display: block;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--success);
+  opacity: 0.35;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.soundwave span:nth-child(1) {
+  height: 4px;
+}
+
+.soundwave span:nth-child(2) {
+  height: 10px;
+}
+
+.soundwave span:nth-child(3) {
+  height: 6px;
+}
+
+.soundwave span:nth-child(4) {
+  height: 8px;
+}
+
+/* Speaking — animated */
+.soundwave.active span {
+  background: var(--accent);
+  opacity: 1;
+  animation: soundwave-bar 0.8s ease-in-out infinite;
+}
+
+.soundwave.active span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.soundwave.active span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.soundwave.active span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.soundwave.active span:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+/* Muted — dimmer */
+.soundwave.muted span {
+  background: var(--text-muted);
+  opacity: 0.25;
+}
+
+@keyframes soundwave-bar {
+
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
 }
 
 @keyframes pulse {
@@ -780,8 +1047,8 @@ input[type="range"]:active::-webkit-slider-thumb {
 }
 
 .player-volume-slider::-webkit-slider-thumb {
-  width: 14px !important;
-  height: 14px !important;
+  width: 12px !important;
+  height: 12px !important;
 }
 
 .player-volume-value {
@@ -1024,7 +1291,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
 }
 
 .dialog {

@@ -13,5 +13,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Native OS notifications
     showNotification: (title: string, body: string) => {
         ipcRenderer.send('show-notification', { title, body })
+    },
+
+    // Push-to-Talk — uses removeAllListeners to prevent listener leak
+    onPttKeyDown: (callback: () => void) => {
+        ipcRenderer.removeAllListeners('ptt-key-down')
+        ipcRenderer.on('ptt-key-down', () => callback())
+    },
+    onPttKeyUp: (callback: () => void) => {
+        ipcRenderer.removeAllListeners('ptt-key-up')
+        ipcRenderer.on('ptt-key-up', () => callback())
+    },
+    offPttEvents: () => {
+        ipcRenderer.removeAllListeners('ptt-key-down')
+        ipcRenderer.removeAllListeners('ptt-key-up')
+    },
+    registerPttKey: (key: string) => {
+        ipcRenderer.send('register-ptt-key', key)
+    },
+    unregisterPttKey: () => {
+        ipcRenderer.send('unregister-ptt-key')
+    },
+    onPttRegisterFailed: (callback: (key: string) => void) => {
+        ipcRenderer.removeAllListeners('ptt-register-failed')
+        ipcRenderer.on('ptt-register-failed', (_event, key) => callback(key))
     }
 })

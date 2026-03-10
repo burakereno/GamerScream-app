@@ -14,6 +14,7 @@ import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.j
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'
 import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
+import { playJoinSoundById, setJoinSoundSpeaker } from '../utils/joinSounds'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -71,11 +72,16 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     const [allMuted, setAllMuted] = useState(false)
     const roomRef = useRef<Room | null>(null)
     const gainNodeRef = useRef<GainNode | null>(null)
+    const analyserNodeRef = useRef<AnalyserNode | null>(null)
+    const micLevelRef = useRef(100) // Store current mic level for VAD gate restore
+    const vadActiveRef = useRef(false) // Track if VAD is actively controlling gain
+    const [isVadGateOpen, setIsVadGateOpen] = useState(true)
     const audioContextRef = useRef<AudioContext | null>(null)
     const micStreamRef = useRef<MediaStream | null>(null)
     const rnnoiseNodeRef = useRef<RnnoiseWorkletNode | null>(null)
     const wetGainRef = useRef<GainNode | null>(null)
     const dryGainRef = useRef<GainNode | null>(null)
+    const speakerIdRef = useRef<string>('') // Track selected output device for setSinkId
     const [rnnoiseActive, setRnnoiseActive] = useState<boolean | null>(null) // null=not tried, true=active, false=failed
     const callbacksRef = useRef(callbacks)
     callbacksRef.current = callbacks
@@ -217,7 +223,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     }, [allMuted, updatePlayerList])
 
     const connect = useCallback(
-        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100) => {
+        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100, joinSoundId: string = '') => {
             if (roomRef.current) {
                 await roomRef.current.disconnect()
             }
@@ -273,6 +279,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                         if (existingEl) existingEl.remove()
                         const el = track.attach()
                         el.id = `audio-${participant.identity}`
+                        // Route to selected speaker device
+                        if (speakerIdRef.current && typeof (el as any).setSinkId === 'function') {
+                            (el as any).setSinkId(speakerIdRef.current).catch(() => { /* device unavailable */ })
+                        }
                         document.body.appendChild(el)
                     }
                     // Apply saved volume to newly subscribed tracks
@@ -294,6 +304,17 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     roomRef.current = null
                     fetchChannels()
                 })
+                // DataChannel: receive join sound ID from other participants
+                room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant) => {
+                    if (!participant) return // ignore server-sent data
+                    try {
+                        const msg = new TextDecoder().decode(payload)
+                        if (msg.startsWith('join-sound:')) {
+                            const soundId = msg.replace('join-sound:', '')
+                            playJoinSoundById(soundId)
+                        }
+                    } catch { /* ignore malformed data */ }
+                })
 
                 await room.connect(livekitUrl, token)
 
@@ -313,10 +334,20 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     const source = ctx.createMediaStreamSource(micStream)
                     const gainNode = ctx.createGain()
                     gainNode.gain.value = micLevel / 100
+                    micLevelRef.current = micLevel
+
+                    // AnalyserNode for VAD raw level measurement (before gain)
+                    const analyser = ctx.createAnalyser()
+                    analyser.fftSize = 256
+                    analyserNodeRef.current = analyser
+
                     // Force mono pipeline — RNNoise outputs mono, stereo dest causes left-only audio
                     const dest = ctx.createMediaStreamDestination()
                     dest.channelCount = 1
                     dest.channelCountMode = 'explicit'
+
+                    // Connect analyser to source for raw level monitoring
+                    source.connect(analyser)
 
                     if (noiseSuppression > 0) {
                         // Build wet/dry mix pipeline with RNNoise
@@ -384,6 +415,15 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                 setIsMuted(false)
                 updatePlayerList(room)
                 fetchChannels()
+
+                // Send join sound to other participants via DataChannel
+                if (joinSoundId) {
+                    const encoder = new TextEncoder()
+                    room.localParticipant.publishData(
+                        encoder.encode(`join-sound:${joinSoundId}`),
+                        { reliable: true }
+                    ).catch(() => { /* ignore if no one else in room */ })
+                }
             } catch (err) {
                 console.error('Failed to connect:', err)
                 throw err
@@ -416,7 +456,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
             audioContextRef.current.close().catch(() => { })
             audioContextRef.current = null
             gainNodeRef.current = null
+            analyserNodeRef.current = null
         }
+        vadActiveRef.current = false
+        setIsVadGateOpen(true)
         setRnnoiseActive(null)
         setIsConnected(false)
         setIsMuted(false)
@@ -433,8 +476,18 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         updatePlayerList(roomRef.current)
     }, [isMuted, updatePlayerList])
 
+    // Direct mute/unmute control for PTT
+    const setMuted = useCallback(async (muted: boolean) => {
+        if (!roomRef.current) return
+        await roomRef.current.localParticipant.setMicrophoneEnabled(!muted)
+        setIsMuted(muted)
+        updatePlayerList(roomRef.current)
+    }, [updatePlayerList])
+
     const setMicGain = useCallback((level: number) => {
-        if (gainNodeRef.current) {
+        micLevelRef.current = level
+        // Don't override gain if VAD gate is actively controlling it
+        if (gainNodeRef.current && !vadActiveRef.current) {
             gainNodeRef.current.gain.value = level / 100
         }
     }, [])
@@ -481,10 +534,48 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         return data.valid
     }, [])
 
+    // Get raw microphone input level for VAD (reads from AnalyserNode, works even when gain=0)
+    const getRawMicLevel = useCallback((): number => {
+        if (!analyserNodeRef.current) return 0
+        const data = new Uint8Array(analyserNodeRef.current.frequencyBinCount)
+        analyserNodeRef.current.getByteTimeDomainData(data)
+        // Calculate RMS level from waveform data
+        let sum = 0
+        for (let i = 0; i < data.length; i++) {
+            const val = (data[i] - 128) / 128
+            sum += val * val
+        }
+        return Math.sqrt(sum / data.length) // 0-1 range
+    }, [])
+
+    // VAD gate control: set gain to 0 (closed) or restore to micLevel (open)
+    const setVadGate = useCallback((open: boolean) => {
+        if (!gainNodeRef.current) return
+        gainNodeRef.current.gain.value = open ? micLevelRef.current / 100 : 0
+        setIsVadGateOpen(open)
+    }, [])
+
+    // Let App.tsx tell the hook when VAD mode is active
+    const setVadActive = useCallback((active: boolean) => {
+        vadActiveRef.current = active
+    }, [])
+
+    // Switch audio output device for all existing audio elements
+    const setSpeakerDevice = useCallback((deviceId: string) => {
+        speakerIdRef.current = deviceId
+        // Re-route all existing participant audio elements
+        document.querySelectorAll<HTMLAudioElement>('audio[id^="audio-"]').forEach((el) => {
+            if (typeof (el as any).setSinkId === 'function') {
+                (el as any).setSinkId(deviceId).catch(() => { /* device unavailable */ })
+            }
+        })
+    }, [])
+
     return {
         isConnected,
         isConnecting,
         isMuted,
+        isVadGateOpen,
         allMuted,
         players,
         roomName,
@@ -493,12 +584,17 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         connect,
         disconnect,
         toggleMute,
+        setMuted,
         toggleMuteAll,
         setPlayerVolume,
         fetchChannels,
         createChannel,
         verifyPin,
         setMicGain,
-        setNoiseSuppressionLevel
+        setNoiseSuppressionLevel,
+        getRawMicLevel,
+        setVadGate,
+        setVadActive,
+        setSpeakerDevice
     }
 }

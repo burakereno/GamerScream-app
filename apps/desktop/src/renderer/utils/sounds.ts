@@ -1,19 +1,34 @@
 /**
  * Discord-style notification sounds using Web Audio API
  * No external files needed — all sounds are generated programmatically.
+ * Supports routing to a specific output device via setSinkId.
  */
 
 let audioCtx: AudioContext | null = null
+let speakerDeviceId: string = ''
 
 function getCtx(): AudioContext {
     if (!audioCtx) audioCtx = new AudioContext()
     return audioCtx
 }
 
+/** Set the output device for notification sounds */
+export function setSoundOutputDevice(deviceId: string): void {
+    speakerDeviceId = deviceId
+    // If AudioContext exists, re-route it
+    if (audioCtx && typeof (audioCtx as any).setSinkId === 'function') {
+        (audioCtx as any).setSinkId(deviceId).catch(() => { /* device unavailable */ })
+    }
+}
+
 /** Short rising "plop" — someone joined */
 export function playJoinSound(): void {
     try {
         const ctx = getCtx()
+        // Route to selected speaker if set
+        if (speakerDeviceId && typeof (ctx as any).setSinkId === 'function') {
+            (ctx as any).setSinkId(speakerDeviceId).catch(() => { /* ignore */ })
+        }
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
 
@@ -38,6 +53,10 @@ export function playJoinSound(): void {
 export function playLeaveSound(): void {
     try {
         const ctx = getCtx()
+        // Route to selected speaker if set
+        if (speakerDeviceId && typeof (ctx as any).setSinkId === 'function') {
+            (ctx as any).setSinkId(speakerDeviceId).catch(() => { /* ignore */ })
+        }
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
 

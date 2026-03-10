@@ -10,7 +10,11 @@ const defaultSettings: AppSettings = {
     micLevel: 100,
     channel: 1,
     autoConnect: false,
-    noiseSuppression: 100
+    noiseSuppression: 100,
+    inputMode: 'voice',
+    pttKey: 'CapsLock',
+    vadThreshold: 15,
+    joinSoundId: 'hero'
 }
 
 export function useSettings() {

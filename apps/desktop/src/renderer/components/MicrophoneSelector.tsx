@@ -26,21 +26,23 @@ export function MicrophoneSelector({ microphones, selectedMic, onSelect, micLeve
                 </select>
             </div>
 
-            <div className="mic-level-row">
-                <label className="form-label" style={{ margin: 0 }}>Mic level</label>
-                <span className="mic-level-value">{micLevel}%</span>
+            <div className="settings-row" style={{ flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step={5}
+                        value={micLevel}
+                        onChange={(e) => onMicLevelChange(Number(e.target.value))}
+                        style={{
+                            flex: 1,
+                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${micLevel}%, var(--bg-primary) ${micLevel}%, var(--bg-primary) 100%)`
+                        }}
+                    />
+                    <span className="settings-value" style={{ minWidth: 40, textAlign: 'right' }}>{micLevel}%</span>
+                </div>
             </div>
-            <input
-                type="range"
-                min="0"
-                max="100"
-                step={5}
-                value={micLevel}
-                onChange={(e) => onMicLevelChange(Number(e.target.value))}
-                style={{
-                    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${micLevel}%, var(--bg-input) ${micLevel}%, var(--bg-input) 100%)`
-                }}
-            />
         </div>
     )
 }

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
+let currentPttKey: string | null = null
 
 // ── Overlay Notification (always-on-top, works over fullscreen games) ──
 function showOverlay(name: string, type: 'join' | 'leave'): void {
@@ -86,7 +87,7 @@ function createWindow(): void {
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         trafficLightPosition: { x: 16, y: 12 },
         autoHideMenuBar: true,
-        icon: join(__dirname, '../../build/icon_512x512@2x@2x.png'),
+        icon: join(__dirname, '../../build/macos.png'),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
             contextIsolation: true,
@@ -135,7 +136,7 @@ function setupAutoUpdater(): void {
 
 app.whenReady().then(() => {
     if (process.platform === 'darwin' && app.dock) {
-        const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon_512x512@2x@2x.png'))
+        const icon = nativeImage.createFromPath(join(__dirname, '../../build/macos.png'))
         if (!icon.isEmpty()) {
             app.dock.setIcon(icon)
         }
@@ -168,4 +169,77 @@ ipcMain.on('show-notification', (_event, { title, body }: { title: string; body:
     const name = body.replace(/ (joined|left).*/, '') || title
     const type = body.includes('left') ? 'leave' : 'join'
     showOverlay(name, type)
+})
+
+// ── Push-to-Talk global hotkey ──
+// globalShortcut only fires on key-down (no key-up support).
+// We detect key-up by using a timeout: if no new key-down arrives
+// within 300ms, we assume the key was released. This works even
+// when the app is in the background during games.
+let pttHeldTimer: ReturnType<typeof setTimeout> | null = null
+let pttIsHeld = false
+
+function unregisterPttKey() {
+    if (currentPttKey) {
+        try {
+            globalShortcut.unregister(currentPttKey)
+        } catch { /* ignore */ }
+        currentPttKey = null
+    }
+    if (pttHeldTimer) {
+        clearTimeout(pttHeldTimer)
+        pttHeldTimer = null
+    }
+    if (pttIsHeld) {
+        pttIsHeld = false
+        mainWindow?.webContents.send('ptt-key-up')
+    }
+}
+
+function resetPttHeldTimer() {
+    if (pttHeldTimer) clearTimeout(pttHeldTimer)
+    pttHeldTimer = setTimeout(() => {
+        // No repeat key-down received within 300ms → key was released
+        if (pttIsHeld) {
+            pttIsHeld = false
+            mainWindow?.webContents.send('ptt-key-up')
+        }
+    }, 300)
+}
+
+ipcMain.on('register-ptt-key', (_event, key: string) => {
+    unregisterPttKey()
+
+    try {
+        // globalShortcut fires repeatedly while key is held on some platforms,
+        // and once on others. The heartbeat timer handles both cases.
+        const registered = globalShortcut.register(key, () => {
+            if (!pttIsHeld) {
+                pttIsHeld = true
+                mainWindow?.webContents.send('ptt-key-down')
+            }
+            resetPttHeldTimer()
+        })
+
+        if (registered) {
+            currentPttKey = key
+            console.log(`🎤 PTT key registered: ${key}`)
+        } else {
+            console.warn(`⚠️ Failed to register PTT key: ${key}`)
+            mainWindow?.webContents.send('ptt-register-failed', key)
+        }
+    } catch (err) {
+        console.warn(`⚠️ PTT key registration error:`, err)
+        mainWindow?.webContents.send('ptt-register-failed', key)
+    }
+})
+
+ipcMain.on('unregister-ptt-key', () => {
+    unregisterPttKey()
+    console.log('🎤 PTT key unregistered')
+})
+
+// Clean up global shortcuts on quit
+app.on('will-quit', () => {
+    globalShortcut.unregisterAll()
 })

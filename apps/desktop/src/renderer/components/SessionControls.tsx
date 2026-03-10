@@ -16,6 +16,7 @@ interface Props {
     onConnect: (customRoomName?: string, pin?: string) => void
     onDisconnect: () => void
     onToggleMute: () => void
+    inputMode: 'voice' | 'ptt' | 'vad'
     onToggleMuteAll: () => void
     onChannelChange: (channel: number) => void
     onAutoConnectChange: (autoConnect: boolean) => void
@@ -79,9 +80,9 @@ function PlayerList({
             {players.map((player) => (
                 <div key={player.identity} className="player-row">
                     <div className="player-info">
-                        <div
-                            className={`player-dot ${player.isSpeaking ? 'speaking' : player.isMuted ? 'muted' : 'online'}`}
-                        />
+                        <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
+                            <span /><span /><span /><span />
+                        </div>
                         <span className="player-name">
                             {player.displayName}
                             {player.isLocal && ' (you)'}
@@ -129,6 +130,7 @@ export function SessionControls({
     onDisconnect,
     onToggleMute,
     onToggleMuteAll,
+    inputMode,
     onChannelChange,
     onAutoConnectChange,
     onPlayerVolumeChange,
@@ -252,13 +254,19 @@ export function SessionControls({
                     }
                 </button>
 
-                <button
-                    className={`btn ${isMuted ? 'btn-muted' : 'btn-mute'}`}
-                    onClick={onToggleMute}
-                    disabled={!isConnected}
-                >
-                    {isMuted ? <><MicOff size={14} /> Unmute</> : <><Mic size={14} /> Mute</>}
-                </button>
+                <div className={`mute-btn-wrapper ${inputMode !== 'voice' ? 'has-tooltip' : ''}`}
+                    data-tooltip={inputMode === 'vad' ? 'Activity modunda otomatik kontrol' : inputMode === 'ptt' ? 'PTT modunda tuş ile kontrol' : ''}>
+                    <button
+                        className={`btn ${isMuted ? 'btn-muted' : 'btn-mute'}`}
+                        onClick={() => {
+                            if (!isConnected || inputMode !== 'voice') return
+                            onToggleMute()
+                        }}
+                        style={!isConnected || inputMode !== 'voice' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                    >
+                        {isMuted ? <><MicOff size={14} /> Unmute</> : <><Mic size={14} /> Mute</>}
+                    </button>
+                </div>
 
                 <div className="controls-spacer" />
 

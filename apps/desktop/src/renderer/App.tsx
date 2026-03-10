@@ -7,16 +7,53 @@ import { ToastContainer, useToast } from './components/Toast'
 import { useAudioDevices } from './hooks/useAudioDevices'
 import { useLiveKit } from './hooks/useLiveKit'
 import { useSettings } from './hooks/useSettings'
-import { playJoinSound, playLeaveSound } from './utils/sounds'
-import { User, Download, ShieldCheck } from 'lucide-react'
+import { playJoinSound, playLeaveSound, setSoundOutputDevice } from './utils/sounds'
+import { JOIN_SOUNDS, playJoinSoundById, setJoinSoundSpeaker } from './utils/joinSounds'
+import { User, Download, ShieldCheck, Mic, Bell } from 'lucide-react'
 import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.7.2'
+const APP_VERSION = '1.8.0'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
+
+// Human-readable key names from keyboard event codes
+function formatKeyName(code: string): string {
+    const map: Record<string, string> = {
+        Backquote: '~', '`': '~', Backslash: '\\', BracketLeft: '[', BracketRight: ']',
+        CapsLock: 'Caps Lock', Tab: 'Tab', Space: 'Space',
+        ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift', Shift: 'Shift',
+        ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl', Control: 'Ctrl',
+        AltLeft: 'L-Alt', AltRight: 'R-Alt', Alt: 'Alt',
+    }
+    if (map[code]) return map[code]
+    if (code.startsWith('Key')) return code.slice(3)
+    if (code.startsWith('Digit')) return code.slice(5)
+    return code
+}
+
+// Convert browser e.code to Electron accelerator format
+function codeToAccelerator(code: string): string {
+    const map: Record<string, string> = {
+        Backquote: '`', Backslash: '\\', BracketLeft: '[', BracketRight: ']',
+        Minus: '-', Equal: '=', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/',
+        CapsLock: 'CapsLock', Tab: 'Tab', Space: 'Space', Escape: 'Escape',
+        Enter: 'Enter', Backspace: 'Backspace', Delete: 'Delete',
+        ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+        ShiftLeft: 'Shift', ShiftRight: 'Shift',
+        ControlLeft: 'Control', ControlRight: 'Control',
+        AltLeft: 'Alt', AltRight: 'Alt',
+        MetaLeft: 'Meta', MetaRight: 'Meta',
+    }
+    if (map[code]) return map[code]
+    if (code.startsWith('Key')) return code.slice(3)
+    if (code.startsWith('Digit')) return code.slice(5)
+    if (code.startsWith('F') && code.length <= 3) return code // F1-F12
+    if (code.startsWith('Numpad')) return 'num' + code.slice(6)
+    return code
+}
 
 export default function App() {
     const { settings, updateSetting } = useSettings()
@@ -33,9 +70,10 @@ export default function App() {
     const [showAdmin, setShowAdmin] = useState(false)
 
     const {
-        isConnected, isConnecting, isMuted, allMuted, players, roomName, channels,
-        rnnoiseActive, connect, disconnect, toggleMute, toggleMuteAll, setPlayerVolume,
-        createChannel, verifyPin, setMicGain, setNoiseSuppressionLevel
+        isConnected, isConnecting, isMuted, isVadGateOpen, allMuted, players, roomName, channels,
+        rnnoiseActive, connect, disconnect, toggleMute, setMuted, toggleMuteAll, setPlayerVolume,
+        createChannel, verifyPin, setMicGain, setNoiseSuppressionLevel, getRawMicLevel, setVadGate, setVadActive,
+        setSpeakerDevice
     } = useLiveKit({
         onParticipantJoin: (name) => {
             playJoinSound()
@@ -59,6 +97,8 @@ export default function App() {
     const [hasEnteredName, setHasEnteredName] = useState(!!settings.username)
     const [connectError, setConnectError] = useState<string | null>(null)
     const autoConnectDone = useRef(false)
+    const [recordingKeybind, setRecordingKeybind] = useState(false)
+    const pttActiveRef = useRef(false) // Track PTT key state to prevent repeated fires
     const [activeTab, setActiveTab] = useState<'channels' | 'settings'>('channels')
 
     // [P3-2] Auto-dismiss error banner after 5 seconds
@@ -146,18 +186,151 @@ export default function App() {
     useEffect(() => {
         if (settings.speakerId && speakers.some((s) => s.deviceId === settings.speakerId)) {
             setSelectedSpeaker(settings.speakerId)
+            setSpeakerDevice(settings.speakerId) // Sync LiveKit audio output
+            setSoundOutputDevice(settings.speakerId) // Sync notification sounds
         }
-    }, [settings.speakerId, speakers, setSelectedSpeaker])
+    }, [settings.speakerId, speakers, setSelectedSpeaker, setSpeakerDevice])
+
+    // Sync join sound speaker device on load
+    useEffect(() => {
+        if (settings.speakerId) {
+            setJoinSoundSpeaker(settings.speakerId)
+        }
+    }, [settings.speakerId])
 
     // [P2-#12] Auto-connect on launch — requires accessVerified
     useEffect(() => {
         if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !autoConnectDone.current) {
             autoConnectDone.current = true
-            connect(settings.username, settings.channel, selectedMic, micLevel, undefined, undefined, settings.noiseSuppression).catch((err) => {
+            connect(settings.username, settings.channel, selectedMic, micLevel, undefined, undefined, settings.noiseSuppression, settings.joinSoundId).catch((err) => {
                 setConnectError(err instanceof Error ? err.message : 'Auto-connect failed')
             })
         }
     }, [accessVerified, hasEnteredName, settings.autoConnect]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // PTT: Auto-mute on connect when in PTT mode
+    useEffect(() => {
+        if (isConnected && settings.inputMode === 'ptt') {
+            setMuted(true)
+        }
+        // VAD: close gate on connect (starts silent, opens when voice detected)
+        if (isConnected && settings.inputMode === 'vad') {
+            setVadGate(false)
+        }
+        // Reset PTT state on disconnect
+        if (!isConnected) {
+            pttActiveRef.current = false
+        }
+    }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // VAD: Voice Activity Detection — poll raw mic level and control gain gate
+    useEffect(() => {
+        if (settings.inputMode !== 'vad' || !isConnected) return
+
+        // Tell the hook that VAD is now controlling gain
+        setVadActive(true)
+
+        const threshold = settings.vadThreshold / 100 // Convert 0-100 to 0-1
+        let holdTimer: ReturnType<typeof setTimeout> | null = null
+        let isOpen = false
+
+        const interval = setInterval(() => {
+            const level = getRawMicLevel()
+
+            if (level > threshold) {
+                // Voice detected — open gate
+                if (!isOpen) {
+                    isOpen = true
+                    setVadGate(true)
+                }
+                // Reset hold timer
+                if (holdTimer) {
+                    clearTimeout(holdTimer)
+                    holdTimer = null
+                }
+            } else if (isOpen && !holdTimer) {
+                // Below threshold — start hold timer before closing
+                holdTimer = setTimeout(() => {
+                    isOpen = false
+                    setVadGate(false)
+                    holdTimer = null
+                }, 250) // 250ms hold time
+            }
+        }, 50) // Poll every 50ms
+
+        return () => {
+            clearInterval(interval)
+            if (holdTimer) clearTimeout(holdTimer)
+            // Restore gain and release VAD control when leaving VAD mode
+            setVadActive(false)
+            setVadGate(true)
+        }
+    }, [settings.inputMode, settings.vadThreshold, isConnected, getRawMicLevel, setVadGate, setVadActive])
+
+    // PTT: Register/unregister global hotkey
+    useEffect(() => {
+        if (settings.inputMode === 'ptt' && isConnected) {
+            const accelerator = codeToAccelerator(settings.pttKey)
+            window.electronAPI?.registerPttKey?.(accelerator)
+        } else {
+            window.electronAPI?.unregisterPttKey?.()
+        }
+        return () => {
+            window.electronAPI?.unregisterPttKey?.()
+        }
+    }, [settings.inputMode, settings.pttKey, isConnected])
+
+    // PTT/VAD → Voice: auto-unmute and restore gain when switching modes while connected
+    useEffect(() => {
+        if (settings.inputMode === 'voice' && isConnected) {
+            if (isMuted) setMuted(false)
+            // Ensure gain is restored (in case switching from VAD where gain was 0)
+            setVadGate(true)
+        }
+    }, [settings.inputMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // PTT: Handle global key events from main process
+    useEffect(() => {
+        if (settings.inputMode !== 'ptt') return
+
+        const handlePttDown = () => {
+            if (!pttActiveRef.current && isConnected) {
+                pttActiveRef.current = true
+                setMuted(false)
+            }
+        }
+
+        const handlePttUp = () => {
+            if (pttActiveRef.current) {
+                pttActiveRef.current = false
+                setMuted(true)
+            }
+        }
+
+        // Layer 1: Main process heartbeat — works even in background (300ms delay)
+        window.electronAPI?.onPttKeyDown?.(handlePttDown)
+        window.electronAPI?.onPttKeyUp?.(handlePttUp)
+
+        // Layer 2: Renderer keyup — instant response when app is focused
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (pttActiveRef.current && e.code === settings.pttKey) {
+                handlePttUp()
+            }
+        }
+        window.addEventListener('keyup', handleKeyUp)
+
+        return () => {
+            window.electronAPI?.offPttEvents?.()
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, [settings.inputMode, settings.pttKey, isConnected, setMuted])
+
+    // PTT: Keybind registration failure
+    useEffect(() => {
+        window.electronAPI?.onPttRegisterFailed?.((key) => {
+            addToast(`Failed to register key: ${key}`, 'leave')
+        })
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleUsernameSubmit = (username: string) => {
         updateSetting('username', username)
@@ -167,11 +340,11 @@ export default function App() {
     const handleConnect = useCallback(async (customRoomName?: string, pin?: string) => {
         setConnectError(null)
         try {
-            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin, settings.noiseSuppression)
+            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin, settings.noiseSuppression, settings.joinSoundId)
         } catch (err) {
             setConnectError(err instanceof Error ? err.message : 'Connection failed')
         }
-    }, [connect, settings.username, settings.channel, selectedMic, micLevel, settings.noiseSuppression])
+    }, [connect, settings.username, settings.channel, selectedMic, micLevel, settings.noiseSuppression, settings.joinSoundId])
 
     const handleMicSelect = (deviceId: string) => {
         setSelectedMic(deviceId)
@@ -181,6 +354,9 @@ export default function App() {
     const handleSpeakerSelect = (deviceId: string) => {
         setSelectedSpeaker(deviceId)
         updateSetting('speakerId', deviceId)
+        setSpeakerDevice(deviceId) // Route LiveKit audio to selected device
+        setSoundOutputDevice(deviceId) // Route notification sounds
+        setJoinSoundSpeaker(deviceId) // Route join sounds
     }
 
     const handleMicLevelChange = (level: number) => {
@@ -231,45 +407,47 @@ export default function App() {
 
     return (
         <div className="app">
-            <div className="drag-region" />
-            <ToastContainer toasts={toasts} />
+            <div className="sticky-header">
 
-            {/* Auto-update banner */}
-            {updateVersion && (
-                <button
-                    className="update-banner no-drag"
-                    onClick={() => {
-                        if (updateReady) {
-                            window.electronAPI?.installUpdate()
+                {/* Auto-update banner */}
+                {updateVersion && (
+                    <button
+                        className="update-banner no-drag"
+                        onClick={() => {
+                            if (updateReady) {
+                                window.electronAPI?.installUpdate()
+                            }
+                        }}
+                    >
+                        <Download size={14} />
+                        {updateReady
+                            ? `v${updateVersion} ready — tap to restart`
+                            : `Downloading v${updateVersion}…`
                         }
-                    }}
-                >
-                    <Download size={14} />
-                    {updateReady
-                        ? `v${updateVersion} ready — tap to restart`
-                        : `Downloading v${updateVersion}…`
-                    }
-                </button>
-            )}
+                    </button>
+                )}
 
-            <div className="app-header">
-                <img src={logoSvg} alt="GamerScream" className="app-logo" />
+                <div className="app-header">
+                    <img src={logoSvg} alt="GamerScream" className="app-logo" />
+                </div>
+
+                <div className="segmented-control">
+                    <button
+                        className={`segmented-btn ${activeTab === 'channels' ? 'segmented-btn-active' : ''}`}
+                        onClick={() => setActiveTab('channels')}
+                    >
+                        Channels
+                    </button>
+                    <button
+                        className={`segmented-btn ${activeTab === 'settings' ? 'segmented-btn-active' : ''}`}
+                        onClick={() => setActiveTab('settings')}
+                    >
+                        Settings
+                    </button>
+                </div>
             </div>
 
-            <div className="segmented-control">
-                <button
-                    className={`segmented-btn ${activeTab === 'channels' ? 'segmented-btn-active' : ''}`}
-                    onClick={() => setActiveTab('channels')}
-                >
-                    Channels
-                </button>
-                <button
-                    className={`segmented-btn ${activeTab === 'settings' ? 'segmented-btn-active' : ''}`}
-                    onClick={() => setActiveTab('settings')}
-                >
-                    Settings
-                </button>
-            </div>
+            <ToastContainer toasts={toasts} />
 
             {activeTab === 'channels' && (
                 <>
@@ -286,7 +464,12 @@ export default function App() {
                         username={settings.username}
                         onConnect={handleConnect}
                         onDisconnect={disconnect}
-                        onToggleMute={toggleMute}
+                        onToggleMute={() => {
+                            // In PTT/VAD mode, manual mute toggle is disabled
+                            if (settings.inputMode !== 'voice') return
+                            toggleMute()
+                        }}
+                        inputMode={settings.inputMode}
                         onToggleMuteAll={toggleMuteAll}
                         onChannelChange={(ch) => updateSetting('channel', ch)}
                         onAutoConnectChange={(ac) => updateSetting('autoConnect', ac)}
@@ -329,7 +512,6 @@ export default function App() {
                                     step={5}
                                     value={settings.noiseSuppression}
                                     onChange={(e) => handleNoiseSuppressionChange(Number(e.target.value))}
-                                    className="player-volume-slider"
                                     style={{
                                         flex: 1,
                                         background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${settings.noiseSuppression}%, var(--bg-primary) ${settings.noiseSuppression}%, var(--bg-primary) 100%)`
@@ -344,6 +526,100 @@ export default function App() {
                                             'High — aggressive noise cancellation'}
                             </span>
                         </div>
+                    </div>
+
+                    <div className="card">
+                        <div className="card-title"><Mic size={14} /> Input Mode</div>
+                        <div className="settings-row">
+                            <span className="settings-label">Mode</span>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                                <button
+                                    className={`ptt-mode-btn ${settings.inputMode === 'voice' ? 'active' : ''}`}
+                                    onClick={() => updateSetting('inputMode', 'voice')}
+                                >
+                                    Voice
+                                </button>
+                                <button
+                                    className={`ptt-mode-btn ${settings.inputMode === 'vad' ? 'active' : ''}`}
+                                    onClick={() => updateSetting('inputMode', 'vad')}
+                                >
+                                    Activity
+                                </button>
+                                <button
+                                    className={`ptt-mode-btn ${settings.inputMode === 'ptt' ? 'active' : ''}`}
+                                    onClick={() => updateSetting('inputMode', 'ptt')}
+                                >
+                                    Push-to-Talk
+                                </button>
+                            </div>
+                        </div>
+                        {settings.inputMode === 'ptt' && (
+                            <div className="settings-row">
+                                <span className="settings-label">Keybind</span>
+                                <button
+                                    className={`ptt-keybind-btn ${recordingKeybind ? 'recording' : ''}`}
+                                    onClick={() => setRecordingKeybind(true)}
+                                    onKeyDown={(e) => {
+                                        if (recordingKeybind) {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            updateSetting('pttKey', e.code)
+                                            setRecordingKeybind(false)
+                                        }
+                                    }}
+                                    onBlur={() => setRecordingKeybind(false)}
+                                >
+                                    {recordingKeybind ? 'Press any key...' : formatKeyName(settings.pttKey)}
+                                </button>
+                            </div>
+                        )}
+                        {settings.inputMode === 'vad' && (
+                            <div className="settings-row" style={{ flexDirection: 'column', gap: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="50"
+                                        step={1}
+                                        value={settings.vadThreshold}
+                                        onChange={(e) => updateSetting('vadThreshold', Number(e.target.value))}
+                                        style={{
+                                            flex: 1,
+                                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${settings.vadThreshold * 2}%, var(--bg-primary) ${settings.vadThreshold * 2}%, var(--bg-primary) 100%)`
+                                        }}
+                                    />
+                                    <span className="settings-value" style={{ minWidth: 40, textAlign: 'right' }}>{settings.vadThreshold}%</span>
+                                </div>
+                            </div>
+                        )}
+                        <span className="settings-hint">
+                            {settings.inputMode === 'voice'
+                                ? 'Always transmitting when connected'
+                                : settings.inputMode === 'vad'
+                                    ? 'Auto-mutes when you stop talking — noise gate'
+                                    : `Hold ${formatKeyName(settings.pttKey)} to talk — works in background`}
+                        </span>
+                    </div>
+
+                    <div className="card">
+                        <div className="card-title"><Bell size={14} /> Join Sound</div>
+                        <div className="join-sound-grid">
+                            {JOIN_SOUNDS.map((sound) => (
+                                <button
+                                    key={sound.id}
+                                    className={`join-sound-btn ${settings.joinSoundId === sound.id ? 'active' : ''}`}
+                                    onClick={() => {
+                                        updateSetting('joinSoundId', sound.id)
+                                        playJoinSoundById(sound.id)
+                                    }}
+                                >
+                                    {sound.emoji} {sound.name}
+                                </button>
+                            ))}
+                        </div>
+                        <span className="settings-hint">
+                            "{JOIN_SOUNDS.find(s => s.id === settings.joinSoundId)?.name}" plays for others when you join
+                        </span>
                     </div>
 
                     <div className="card">

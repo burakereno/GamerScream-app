@@ -36,6 +36,7 @@ const defaultProps = {
     onConnect: vi.fn(),
     onDisconnect: vi.fn(),
     onToggleMute: vi.fn(),
+    inputMode: 'voice' as const,
     onToggleMuteAll: vi.fn(),
     onChannelChange: vi.fn(),
     onAutoConnectChange: vi.fn(),
@@ -163,11 +164,11 @@ describe('SessionControls', () => {
         it('shows Mute button only when connected', () => {
             const { rerender } = render(<SessionControls {...defaultProps} />)
 
-            const muteBtn = screen.getByText('Mute')
-            expect(muteBtn.closest('button')).toBeDisabled()
+            const muteBtn = screen.getByText('Mute').closest('button')!
+            expect(muteBtn.style.cursor).toBe('not-allowed')
 
             rerender(<SessionControls {...defaultProps} isConnected={true} roomName="ch-1" />)
-            expect(muteBtn.closest('button')).not.toBeDisabled()
+            expect(muteBtn.style.cursor).not.toBe('not-allowed')
         })
     })
 })
