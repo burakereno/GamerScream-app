@@ -10,6 +10,8 @@ export interface ElectronAPI {
     offPttEvents: () => void
     registerPttKey: (key: string) => void
     unregisterPttKey: () => void
+    cancelPttTimer: () => void
+    pttRelease: () => void
     onPttRegisterFailed: (callback: (key: string) => void) => void
 }
 

@@ -94,17 +94,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
   -webkit-app-region: no-drag;
 }
 
-/* Inside sticky-header: the header itself is the drag region */
-.sticky-header {
+/* Isolated drag handle: only the logo row is draggable.
+   This avoids the fragile parent-drag + child-no-drag pattern
+   that breaks with backdrop-filter in Electron. */
+.drag-handle {
   -webkit-app-region: drag;
-}
-
-/* Ensure interactive content sits above drag region */
-.sticky-header .segmented-control,
-.sticky-header .update-banner {
-  position: relative;
-  z-index: 2;
-  -webkit-app-region: no-drag;
 }
 
 /* ============================================
@@ -175,10 +169,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
   gap: 12px;
 }
 
-/* macOS: extra top padding for traffic light buttons */
+/* macOS: extra top padding for traffic light buttons — applied to drag-handle
+   so the entire area above the logo is also draggable */
 @supports (-webkit-app-region: drag) {
-  .sticky-header {
-    padding-top: 40px;
+  .drag-handle {
+    padding-top: 28px;
   }
 }
 
@@ -1027,13 +1022,13 @@ input[type="range"]:active::-webkit-slider-thumb {
   margin-left: auto;
 }
 
-/* Per-player volume */
+/* Per-player volume — aligned with player name (after soundwave icon + gap) */
 .player-volume {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 4px;
-  margin-left: 16px;
+  margin-left: 24px;
 }
 
 .player-volume-icon {

@@ -178,6 +178,7 @@ ipcMain.on('show-notification', (_event, { title, body }: { title: string; body:
 // when the app is in the background during games.
 let pttHeldTimer: ReturnType<typeof setTimeout> | null = null
 let pttIsHeld = false
+let pttRepeatSeen = false // true once first key repeat arrives
 
 function unregisterPttKey() {
     if (currentPttKey) {
@@ -192,31 +193,37 @@ function unregisterPttKey() {
     }
     if (pttIsHeld) {
         pttIsHeld = false
+        pttRepeatSeen = false
         mainWindow?.webContents.send('ptt-key-up')
     }
 }
 
 function resetPttHeldTimer() {
     if (pttHeldTimer) clearTimeout(pttHeldTimer)
+    // macOS initial key repeat delay is ~375ms (default), can be up to 1800ms.
+    // Use 800ms until first repeat arrives, then 300ms for fast release detection.
+    const timeout = pttRepeatSeen ? 300 : 800
     pttHeldTimer = setTimeout(() => {
-        // No repeat key-down received within 300ms → key was released
         if (pttIsHeld) {
             pttIsHeld = false
+            pttRepeatSeen = false
             mainWindow?.webContents.send('ptt-key-up')
         }
-    }, 300)
+    }, timeout)
 }
 
 ipcMain.on('register-ptt-key', (_event, key: string) => {
     unregisterPttKey()
 
     try {
-        // globalShortcut fires repeatedly while key is held on some platforms,
-        // and once on others. The heartbeat timer handles both cases.
         const registered = globalShortcut.register(key, () => {
             if (!pttIsHeld) {
                 pttIsHeld = true
+                pttRepeatSeen = false
                 mainWindow?.webContents.send('ptt-key-down')
+            } else {
+                // Key repeat arrived — switch to shorter timeout
+                pttRepeatSeen = true
             }
             resetPttHeldTimer()
         })
@@ -237,6 +244,27 @@ ipcMain.on('register-ptt-key', (_event, key: string) => {
 ipcMain.on('unregister-ptt-key', () => {
     unregisterPttKey()
     console.log('🎤 PTT key unregistered')
+})
+
+// Renderer tells us it's focused and will handle keyup — cancel our timer
+ipcMain.on('ptt-cancel-timer', () => {
+    if (pttHeldTimer) {
+        clearTimeout(pttHeldTimer)
+        pttHeldTimer = null
+    }
+})
+
+// Renderer detected key release via native keyup event
+ipcMain.on('ptt-release', () => {
+    if (pttIsHeld) {
+        pttIsHeld = false
+        pttRepeatSeen = false
+        if (pttHeldTimer) {
+            clearTimeout(pttHeldTimer)
+            pttHeldTimer = null
+        }
+        mainWindow?.webContents.send('ptt-key-up')
+    }
 })
 
 // Clean up global shortcuts on quit

@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.8.0'
+const APP_VERSION = '1.8.1'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -208,20 +208,25 @@ export default function App() {
         }
     }, [accessVerified, hasEnteredName, settings.autoConnect]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // PTT: Auto-mute on connect when in PTT mode
+    // Mode transition: handle mute/unmute and gate state on connect or mode switch
     useEffect(() => {
         if (isConnected && settings.inputMode === 'ptt') {
             setMuted(true)
         }
-        // VAD: close gate on connect (starts silent, opens when voice detected)
         if (isConnected && settings.inputMode === 'vad') {
-            setVadGate(false)
+            // Unmute mic — VAD controls audio via gain gate, not mute
+            if (isMuted) setMuted(false)
+            setVadGate(false) // Start with gate closed, opens when voice detected
+        }
+        if (isConnected && settings.inputMode === 'voice') {
+            if (isMuted) setMuted(false)
+            setVadGate(true) // Fully open gate for voice mode
         }
         // Reset PTT state on disconnect
         if (!isConnected) {
             pttActiveRef.current = false
         }
-    }, [isConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isConnected, settings.inputMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // VAD: Voice Activity Detection — poll raw mic level and control gain gate
     useEffect(() => {
@@ -267,63 +272,97 @@ export default function App() {
         }
     }, [settings.inputMode, settings.vadThreshold, isConnected, getRawMicLevel, setVadGate, setVadActive])
 
-    // PTT: Register/unregister global hotkey
-    useEffect(() => {
-        if (settings.inputMode === 'ptt' && isConnected) {
-            const accelerator = codeToAccelerator(settings.pttKey)
-            window.electronAPI?.registerPttKey?.(accelerator)
-        } else {
-            window.electronAPI?.unregisterPttKey?.()
-        }
-        return () => {
-            window.electronAPI?.unregisterPttKey?.()
-        }
-    }, [settings.inputMode, settings.pttKey, isConnected])
+    // Removed: mode switch auto-unmute is now handled by the unified mode transition effect above
 
-    // PTT/VAD → Voice: auto-unmute and restore gain when switching modes while connected
-    useEffect(() => {
-        if (settings.inputMode === 'voice' && isConnected) {
-            if (isMuted) setMuted(false)
-            // Ensure gain is restored (in case switching from VAD where gain was 0)
-            setVadGate(true)
-        }
-    }, [settings.inputMode]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Keep refs for values used in PTT handlers to avoid effect re-runs on mute changes
+    const isConnectedRef = useRef(isConnected)
+    isConnectedRef.current = isConnected
+    const setMutedRef = useRef(setMuted)
+    setMutedRef.current = setMuted
 
-    // PTT: Handle global key events from main process
+    // PTT: Unified focus-aware push-to-talk
+    // When focused: use renderer keydown/keyup (perfect key-up detection for all keys)
+    // When blurred: use globalShortcut + timer (works in background, slight delay on release)
     useEffect(() => {
-        if (settings.inputMode !== 'ptt') return
+        if (settings.inputMode !== 'ptt') {
+            window.electronAPI?.unregisterPttKey?.()
+            return
+        }
+
+        const accelerator = codeToAccelerator(settings.pttKey)
 
         const handlePttDown = () => {
-            if (!pttActiveRef.current && isConnected) {
+            if (!pttActiveRef.current && isConnectedRef.current) {
                 pttActiveRef.current = true
-                setMuted(false)
+                setMutedRef.current(false)
             }
         }
 
         const handlePttUp = () => {
             if (pttActiveRef.current) {
                 pttActiveRef.current = false
-                setMuted(true)
+                setMutedRef.current(true)
             }
         }
 
-        // Layer 1: Main process heartbeat — works even in background (300ms delay)
+        // --- Renderer key events (used when focused) ---
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === settings.pttKey && !e.repeat) {
+                handlePttDown()
+            }
+        }
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.code === settings.pttKey) {
+                handlePttUp()
+                window.electronAPI?.pttRelease?.() // sync main process state
+            }
+        }
+
+        // --- Main process IPC events (used when in background) ---
         window.electronAPI?.onPttKeyDown?.(handlePttDown)
         window.electronAPI?.onPttKeyUp?.(handlePttUp)
 
-        // Layer 2: Renderer keyup — instant response when app is focused
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (pttActiveRef.current && e.code === settings.pttKey) {
+        // --- Focus/blur switching ---
+        const onFocus = () => {
+            // Focused: renderer handles PTT directly, no globalShortcut needed
+            window.electronAPI?.unregisterPttKey?.()
+            window.addEventListener('keydown', handleKeyDown)
+            window.addEventListener('keyup', handleKeyUp)
+        }
+
+        const onBlur = () => {
+            // Background: globalShortcut + timer handles PTT
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+            // Auto-mute if PTT was active when losing focus
+            if (pttActiveRef.current) {
                 handlePttUp()
             }
+            window.electronAPI?.registerPttKey?.(accelerator)
         }
-        window.addEventListener('keyup', handleKeyUp)
+
+        // Initial setup based on current focus
+        if (document.hasFocus()) {
+            // Focused: renderer keydown/keyup
+            window.addEventListener('keydown', handleKeyDown)
+            window.addEventListener('keyup', handleKeyUp)
+        } else {
+            // Background: globalShortcut + timer
+            window.electronAPI?.registerPttKey?.(accelerator)
+        }
+
+        window.addEventListener('focus', onFocus)
+        window.addEventListener('blur', onBlur)
 
         return () => {
             window.electronAPI?.offPttEvents?.()
+            window.electronAPI?.unregisterPttKey?.()
+            window.removeEventListener('keydown', handleKeyDown)
             window.removeEventListener('keyup', handleKeyUp)
+            window.removeEventListener('focus', onFocus)
+            window.removeEventListener('blur', onBlur)
         }
-    }, [settings.inputMode, settings.pttKey, isConnected, setMuted])
+    }, [settings.inputMode, settings.pttKey]) // refs avoid re-registration
 
     // PTT: Keybind registration failure
     useEffect(() => {
@@ -412,7 +451,7 @@ export default function App() {
                 {/* Auto-update banner */}
                 {updateVersion && (
                     <button
-                        className="update-banner no-drag"
+                        className="update-banner"
                         onClick={() => {
                             if (updateReady) {
                                 window.electronAPI?.installUpdate()
@@ -427,8 +466,11 @@ export default function App() {
                     </button>
                 )}
 
-                <div className="app-header">
-                    <img src={logoSvg} alt="GamerScream" className="app-logo" />
+                {/* Drag handle: only this area is draggable for window movement */}
+                <div className="drag-handle">
+                    <div className="app-header">
+                        <img src={logoSvg} alt="GamerScream" className="app-logo" />
+                    </div>
                 </div>
 
                 <div className="segmented-control">
