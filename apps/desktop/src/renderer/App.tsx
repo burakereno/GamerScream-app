@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.8.1'
+const APP_VERSION = '1.8.2'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -460,7 +460,7 @@ export default function App() {
                     >
                         <Download size={14} />
                         {updateReady
-                            ? `v${updateVersion} ready — tap to restart`
+                            ? `v${updateVersion} ready — tap to ${navigator.platform?.includes('Mac') ? 'download' : 'restart'}`
                             : `Downloading v${updateVersion}…`
                         }
                     </button>

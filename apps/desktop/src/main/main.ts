@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut, shell } from 'electron'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 
@@ -160,7 +160,12 @@ app.on('window-all-closed', () => {
 
 // IPC handlers
 ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall(false, true)
+    if (process.platform === 'darwin') {
+        // macOS: unsigned apps can't auto-update via Squirrel — open release page
+        shell.openExternal('https://github.com/burakereno/GamerScream-app/releases/latest')
+    } else {
+        autoUpdater.quitAndInstall(false, true)
+    }
 })
 
 // Overlay notification — shows over fullscreen games
