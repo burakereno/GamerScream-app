@@ -62,9 +62,9 @@ export function UsernameEntry({ onSubmit, savedUsername, needsPin, onPinSubmit }
                                     className="username-input pin-gate-input"
                                     type="password"
                                     value={pin}
-                                    onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setPinError('') }}
+                                    onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 8)); setPinError('') }}
                                     placeholder="App PIN"
-                                    maxLength={4}
+                                    maxLength={8}
                                 />
                             </div>
                             {pinError && <span className="pin-gate-error">{pinError}</span>}

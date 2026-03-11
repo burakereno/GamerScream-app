@@ -6,6 +6,13 @@ let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 let currentPttKey: string | null = null
 
+// Safe IPC send — prevents crashes when sending to destroyed windows
+function safeSend(channel: string, ...args: unknown[]): void {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send(channel, ...args)
+    }
+}
+
 // ── Overlay Notification (always-on-top, works over fullscreen games) ──
 function showOverlay(name: string, type: 'join' | 'leave'): void {
     // Close any existing overlay
@@ -48,7 +55,14 @@ function showOverlay(name: string, type: 'join' | 'leave'): void {
         overlayWindow.showInactive()
     })
 
+    // Clean up reference when overlay is destroyed (prevents stale ref crashes)
+    overlayWindow.on('closed', () => {
+        overlayWindow = null
+    })
+
     // Inline HTML — no external file dependency (fixes production build)
+    // NOTE: Inline script only triggers CSS leave animation — does NOT call window.close()
+    // The main process setTimeout below is the SOLE close mechanism (prevents double-close race)
     const icon = type === 'join' ? '🎮' : '👋'
     const action = type === 'join' ? 'joined' : 'left'
     const safeName = name.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c))
@@ -63,16 +77,15 @@ body{background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSy
 @keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
 </style></head><body>
 <div class="overlay" id="overlay"><span class="icon">${icon}</span><span><span class="name">${safeName}</span> ${action}</span></div>
-<script>setTimeout(()=>{document.getElementById('overlay').classList.add('leaving');setTimeout(()=>window.close(),300)},4700)</script>
+<script>setTimeout(()=>{document.getElementById('overlay').classList.add('leaving')},4700)</script>
 </body></html>`
 
     overlayWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 
-    // Auto-close after 5 seconds
+    // Auto-close after 5 seconds — SOLE close mechanism
     setTimeout(() => {
         if (overlayWindow && !overlayWindow.isDestroyed()) {
             overlayWindow.close()
-            overlayWindow = null
         }
     }, 5000)
 }
@@ -95,6 +108,11 @@ function createWindow(): void {
         }
     })
 
+    // Fix 2: Clean up reference when main window is destroyed
+    mainWindow.on('closed', () => {
+        mainWindow = null
+    })
+
     if (process.platform !== 'darwin') {
         Menu.setApplicationMenu(null)
     }
@@ -112,15 +130,11 @@ function setupAutoUpdater(): void {
     autoUpdater.autoInstallOnAppQuit = true
 
     autoUpdater.on('update-available', (info) => {
-        mainWindow?.webContents.send('update-available', {
-            version: info.version
-        })
+        safeSend('update-available', { version: info.version })
     })
 
     autoUpdater.on('update-downloaded', (info) => {
-        mainWindow?.webContents.send('update-downloaded', {
-            version: info.version
-        })
+        safeSend('update-downloaded', { version: info.version })
     })
 
     autoUpdater.on('error', (err) => {
@@ -199,7 +213,7 @@ function unregisterPttKey() {
     if (pttIsHeld) {
         pttIsHeld = false
         pttRepeatSeen = false
-        mainWindow?.webContents.send('ptt-key-up')
+        safeSend('ptt-key-up')
     }
 }
 
@@ -212,7 +226,7 @@ function resetPttHeldTimer() {
         if (pttIsHeld) {
             pttIsHeld = false
             pttRepeatSeen = false
-            mainWindow?.webContents.send('ptt-key-up')
+            safeSend('ptt-key-up')
         }
     }, timeout)
 }
@@ -225,7 +239,7 @@ ipcMain.on('register-ptt-key', (_event, key: string) => {
             if (!pttIsHeld) {
                 pttIsHeld = true
                 pttRepeatSeen = false
-                mainWindow?.webContents.send('ptt-key-down')
+                safeSend('ptt-key-down')
             } else {
                 // Key repeat arrived — switch to shorter timeout
                 pttRepeatSeen = true
@@ -238,11 +252,11 @@ ipcMain.on('register-ptt-key', (_event, key: string) => {
             console.log(`🎤 PTT key registered: ${key}`)
         } else {
             console.warn(`⚠️ Failed to register PTT key: ${key}`)
-            mainWindow?.webContents.send('ptt-register-failed', key)
+            safeSend('ptt-register-failed', key)
         }
     } catch (err) {
         console.warn(`⚠️ PTT key registration error:`, err)
-        mainWindow?.webContents.send('ptt-register-failed', key)
+        safeSend('ptt-register-failed', key)
     }
 })
 
@@ -268,7 +282,7 @@ ipcMain.on('ptt-release', () => {
             clearTimeout(pttHeldTimer)
             pttHeldTimer = null
         }
-        mainWindow?.webContents.send('ptt-key-up')
+        safeSend('ptt-key-up')
     }
 })
 

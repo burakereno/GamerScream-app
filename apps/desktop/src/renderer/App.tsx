@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.8.2'
+const APP_VERSION = '1.8.3'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
@@ -222,9 +222,11 @@ export default function App() {
             if (isMuted) setMuted(false)
             setVadGate(true) // Fully open gate for voice mode
         }
-        // Reset PTT state on disconnect
+        // Reset all mode state on disconnect
         if (!isConnected) {
             pttActiveRef.current = false
+            setVadActive(false)
+            setVadGate(true)
         }
     }, [isConnected, settings.inputMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -234,6 +236,7 @@ export default function App() {
 
         // Tell the hook that VAD is now controlling gain
         setVadActive(true)
+        setVadGate(false) // Ensure gate starts closed (prevents flash from cleanup)
 
         const threshold = settings.vadThreshold / 100 // Convert 0-100 to 0-1
         let holdTimer: ReturnType<typeof setTimeout> | null = null
@@ -497,6 +500,7 @@ export default function App() {
                         isConnected={isConnected}
                         isConnecting={isConnecting}
                         isMuted={isMuted}
+                        isVadGateOpen={isVadGateOpen}
                         allMuted={allMuted}
                         channel={settings.channel}
                         autoConnect={settings.autoConnect}

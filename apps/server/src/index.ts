@@ -342,13 +342,13 @@ async function buildRoomList() {
         })
     }
 
+    const toDelete: string[] = []
     for (const [roomName, custom] of customChannels.entries()) {
         const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
         const count = lkRoom ? lkRoom.numParticipants : 0
 
         if (count === 0 && Date.now() - custom.createdAt > 60000) {
-            customChannels.delete(roomName)
-            console.log(`🗑️ Custom channel auto-deleted: "${custom.name}" (${roomName})`)
+            toDelete.push(roomName)
             continue
         }
 
@@ -361,6 +361,12 @@ async function buildRoomList() {
             createdBy: custom.createdBy
         })
     }
+    // Delete empty channels after iteration (Fix #6: avoid Map mutation during iteration)
+    toDelete.forEach(rn => {
+        const ch = customChannels.get(rn)
+        customChannels.delete(rn)
+        if (ch) console.log(`🗑️ Custom channel auto-deleted: "${ch.name}" (${rn})`)
+    })
 
     return rooms
 }

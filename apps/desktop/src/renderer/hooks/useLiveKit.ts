@@ -64,6 +64,7 @@ export interface LiveKitCallbacks {
 export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true) {
     const [isConnected, setIsConnected] = useState(false)
     const [isConnecting, setIsConnecting] = useState(false)
+    const connectingRef = useRef(false) // Race condition guard
     const [isMuted, setIsMuted] = useState(false)
     const [players, setPlayers] = useState<ConnectedPlayer[]>([])
     const [roomName, setRoomName] = useState('')
@@ -224,9 +225,33 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
     const connect = useCallback(
         async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100, joinSoundId: string = '') => {
+            // Fix #4: Race condition guard — prevent concurrent connect calls
+            if (connectingRef.current) return
+            connectingRef.current = true
+
+            // Fix #2: Full cleanup of previous session (AudioContext, mic stream, RNNoise)
             if (roomRef.current) {
                 await roomRef.current.disconnect()
+                roomRef.current = null
             }
+            if (rnnoiseNodeRef.current) {
+                rnnoiseNodeRef.current.destroy()
+                rnnoiseNodeRef.current = null
+            }
+            wetGainRef.current = null
+            dryGainRef.current = null
+            if (micStreamRef.current) {
+                micStreamRef.current.getTracks().forEach(t => t.stop())
+                micStreamRef.current = null
+            }
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(() => { })
+                audioContextRef.current = null
+                gainNodeRef.current = null
+                analyserNodeRef.current = null
+            }
+            // Fix #1: Clean up orphan audio elements from previous session
+            document.querySelectorAll<HTMLAudioElement>('audio[id^="audio-"]').forEach(el => el.remove())
 
             setIsConnecting(true)
 
@@ -300,8 +325,11 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                 })
                 room.on(RoomEvent.Disconnected, () => {
                     setIsConnected(false)
+                    setAllMuted(false) // Fix #11: Reset allMuted on disconnect
                     setPlayers([])
                     roomRef.current = null
+                    // Fix #1: Clean up orphan audio elements
+                    document.querySelectorAll<HTMLAudioElement>('audio[id^="audio-"]').forEach(el => el.remove())
                     fetchChannels()
                 })
                 // DataChannel: receive join sound ID from other participants
@@ -336,7 +364,8 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     gainNode.gain.value = micLevel / 100
                     micLevelRef.current = micLevel
 
-                    // AnalyserNode for VAD raw level measurement (before gain)
+                    // AnalyserNode for VAD level measurement (before gain gate)
+                    // Connected conditionally: after RNNoise when active, or on raw source when off
                     const analyser = ctx.createAnalyser()
                     analyser.fftSize = 256
                     analyserNodeRef.current = analyser
@@ -345,9 +374,6 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     const dest = ctx.createMediaStreamDestination()
                     dest.channelCount = 1
                     dest.channelCountMode = 'explicit'
-
-                    // Connect analyser to source for raw level monitoring
-                    source.connect(analyser)
 
                     if (noiseSuppression > 0) {
                         // Build wet/dry mix pipeline with RNNoise
@@ -380,7 +406,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                             // Merger to combine wet + dry
                             const merger = ctx.createGain()
 
-                            source.connect(rnnoiseNode).connect(compensationGain).connect(wetGain).connect(merger)
+                            source.connect(rnnoiseNode).connect(compensationGain)
+                            // VAD analyser taps AFTER noise suppression — measures clean signal
+                            compensationGain.connect(analyser)
+                            compensationGain.connect(wetGain).connect(merger)
                             source.connect(dryGain).connect(merger)
                             merger.connect(gainNode).connect(dest)
 
@@ -389,10 +418,13 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                         } catch (rnnoiseErr) {
                             console.warn('RNNoise init failed, using basic pipeline:', rnnoiseErr)
                             setRnnoiseActive(false)
+                            // Fallback: analyser on raw source
+                            source.connect(analyser)
                             source.connect(gainNode).connect(dest)
                         }
                     } else {
-                        // No noise suppression — basic pipeline
+                        // No noise suppression — analyser on raw source
+                        source.connect(analyser)
                         source.connect(gainNode).connect(dest)
                     }
 
@@ -429,6 +461,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                 throw err
             } finally {
                 setIsConnecting(false)
+                connectingRef.current = false
             }
         },
         [updatePlayerList, fetchChannels]
@@ -486,8 +519,13 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
     const setMicGain = useCallback((level: number) => {
         micLevelRef.current = level
-        // Don't override gain if VAD gate is actively controlling it
-        if (gainNodeRef.current && !vadActiveRef.current) {
+        if (!gainNodeRef.current) return
+        if (vadActiveRef.current) {
+            // VAD active: only update gain when gate is currently open
+            if (gainNodeRef.current.gain.value > 0) {
+                gainNodeRef.current.gain.value = level / 100
+            }
+        } else {
             gainNodeRef.current.gain.value = level / 100
         }
     }, [])

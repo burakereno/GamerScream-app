@@ -6,6 +6,7 @@ interface Props {
     isConnected: boolean
     isConnecting: boolean
     isMuted: boolean
+    isVadGateOpen: boolean
     allMuted: boolean
     channel: number
     autoConnect: boolean
@@ -119,6 +120,7 @@ export function SessionControls({
     isConnected,
     isConnecting,
     isMuted,
+    isVadGateOpen,
     allMuted,
     channel,
     autoConnect,
@@ -254,19 +256,31 @@ export function SessionControls({
                     }
                 </button>
 
-                <div className={`mute-btn-wrapper ${inputMode !== 'voice' ? 'has-tooltip' : ''}`}
-                    data-tooltip={inputMode === 'vad' ? 'Activity modunda otomatik kontrol' : inputMode === 'ptt' ? 'PTT modunda tuş ile kontrol' : ''}>
-                    <button
-                        className={`btn ${isMuted ? 'btn-muted' : 'btn-mute'}`}
-                        onClick={() => {
-                            if (!isConnected || inputMode !== 'voice') return
-                            onToggleMute()
-                        }}
-                        style={!isConnected || inputMode !== 'voice' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-                    >
-                        {isMuted ? <><MicOff size={14} /> Unmute</> : <><Mic size={14} /> Mute</>}
-                    </button>
-                </div>
+                {/* Mute button — VAD mode shows gate state */}
+                {inputMode === 'vad' && isConnected ? (
+                    <div className={`mute-btn-wrapper has-tooltip`}
+                        data-tooltip="Activity modunda otomatik kontrol">
+                        <button
+                            className={`btn ${isVadGateOpen ? 'btn-vad-open' : 'btn-vad-closed'}`}
+                        >
+                            {isVadGateOpen ? <><Mic size={14} /> Live</> : <><MicOff size={14} /> Gate</>}
+                        </button>
+                    </div>
+                ) : (
+                    <div className={`mute-btn-wrapper ${inputMode === 'ptt' ? 'has-tooltip' : ''}`}
+                        data-tooltip={inputMode === 'ptt' ? 'PTT modunda tuş ile kontrol' : ''}>
+                        <button
+                            className={`btn ${isMuted ? 'btn-muted' : 'btn-mute'}`}
+                            onClick={() => {
+                                if (!isConnected || inputMode !== 'voice') return
+                                onToggleMute()
+                            }}
+                            style={!isConnected || inputMode !== 'voice' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                        >
+                            {isMuted ? <><MicOff size={14} /> Unmute</> : <><Mic size={14} /> Mute</>}
+                        </button>
+                    </div>
+                )}
 
                 <div className="controls-spacer" />
 

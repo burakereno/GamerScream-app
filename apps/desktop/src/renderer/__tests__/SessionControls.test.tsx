@@ -20,6 +20,7 @@ const defaultProps = {
     isConnected: false,
     isConnecting: false,
     isMuted: false,
+    isVadGateOpen: true,
     allMuted: false,
     channel: 1,
     autoConnect: false,

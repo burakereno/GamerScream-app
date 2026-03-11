@@ -13,7 +13,7 @@ const defaultSettings: AppSettings = {
     noiseSuppression: 100,
     inputMode: 'voice',
     pttKey: 'CapsLock',
-    vadThreshold: 15,
+    vadThreshold: 10,
     joinSoundId: 'hero'
 }
 
@@ -30,9 +30,12 @@ export function useSettings() {
         return defaultSettings
     })
 
-    // Persist settings on change
+    // Fix #9: Debounce localStorage writes to avoid excessive I/O during slider drags
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+        const timer = setTimeout(() => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+        }, 300)
+        return () => clearTimeout(timer)
     }, [settings])
 
     const updateSetting = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {

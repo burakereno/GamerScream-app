@@ -648,6 +648,20 @@ input[type="range"]:active::-webkit-slider-thumb {
   background: rgba(239, 83, 80, 0.25);
 }
 
+/* VAD gate button states */
+.btn-vad-open {
+  background: rgba(76, 175, 80, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  box-shadow: 0 0 12px var(--success-glow);
+}
+
+.btn-vad-closed {
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
 /* ============================================
    SESSION CONTROLS
    ============================================ */
