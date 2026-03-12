@@ -18,45 +18,52 @@ const defaultSettings: AppSettings = {
 }
 
 export function useSettings() {
-    const [settings, setSettings] = useState<AppSettings>(defaultSettings)
-    const loaded = useRef(false)
+    // SYNC init from localStorage — guarantees settings.username is available
+    // on the very first render (prevents hasEnteredName flash bug)
+    const [settings, setSettings] = useState<AppSettings>(() => {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY)
+            if (stored) {
+                return { ...defaultSettings, ...JSON.parse(stored) }
+            }
+        } catch {
+            // ignore parse errors
+        }
+        return defaultSettings
+    })
 
-    // Load settings from file-based IPC storage (falls back to localStorage for migration)
+    const recovered = useRef(false)
+
+    // ASYNC recovery: if localStorage was empty (macOS translocation),
+    // try to recover from file-based storage and backfill localStorage
     useEffect(() => {
-        (async () => {
+        if (settings.username) return // Already have settings, no recovery needed
+        ;(async () => {
             try {
-                // Try file-based storage first (persistent on macOS)
                 const fileStored = await window.electronAPI?.getStoredSettings?.()
-                if (fileStored) {
-                    setSettings({ ...defaultSettings, ...(fileStored as Partial<AppSettings>) })
-                    loaded.current = true
-                    return
-                }
-                // Fall back to localStorage (migration from older versions)
-                const lsStored = localStorage.getItem(STORAGE_KEY)
-                if (lsStored) {
-                    const parsed = JSON.parse(lsStored)
-                    setSettings({ ...defaultSettings, ...parsed })
-                    // Migrate to file-based storage
-                    window.electronAPI?.setStoredSettings?.(JSON.stringify({ ...defaultSettings, ...parsed }))
-                    loaded.current = true
-                    return
+                if (fileStored && (fileStored as Partial<AppSettings>).username) {
+                    const merged = { ...defaultSettings, ...(fileStored as Partial<AppSettings>) }
+                    setSettings(merged)
+                    // Backfill localStorage so next launch is instant
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+                    recovered.current = true
                 }
             } catch {
-                // ignore parse errors
+                // ignore
             }
-            loaded.current = true
         })()
-    }, [])
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Persist settings to file-based storage (debounced)
+    // Debounced write to BOTH localStorage (fast) and file (reliable)
     useEffect(() => {
-        if (!loaded.current) return // Don't write defaults before load completes
+        if (recovered.current) {
+            recovered.current = false
+            return // Skip the write triggered by recovery itself
+        }
         const timer = setTimeout(() => {
             const json = JSON.stringify(settings)
-            // Write to both: file-based (reliable) and localStorage (fast sync fallback)
-            window.electronAPI?.setStoredSettings?.(json)
             localStorage.setItem(STORAGE_KEY, json)
+            window.electronAPI?.setStoredSettings?.(json)
         }, 300)
         return () => clearTimeout(timer)
     }, [settings])
