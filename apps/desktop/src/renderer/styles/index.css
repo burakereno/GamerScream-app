@@ -94,17 +94,15 @@ input[type="range"]::-webkit-slider-thumb:hover {
   -webkit-app-region: no-drag;
 }
 
-/* Isolated drag handle: only the logo row is draggable.
-   This avoids the fragile parent-drag + child-no-drag pattern
-   that breaks with backdrop-filter in Electron. */
-.drag-handle {
-  -webkit-app-region: drag;
-}
+/* Drag handle: no longer sets app-region: drag.
+   macOS hiddenInset title bar provides its own native drag area.
+   Removing CSS drag prevents intermittent click-swallowing on tabs. */
 
 /* ============================================
    UPDATE BANNER
    ============================================ */
 .update-banner {
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,11 +165,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
   gap: 12px;
 }
 
-/* macOS: extra top padding for traffic light buttons — applied to drag-handle
-   so the entire area above the logo is also draggable */
+/* macOS: extra top padding for traffic light buttons */
 @supports (-webkit-app-region: drag) {
-  .drag-handle {
-    padding-top: 28px;
+  .sticky-header {
+    padding-top: 36px;
   }
 }
 
