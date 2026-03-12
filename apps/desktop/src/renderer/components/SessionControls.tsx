@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X } from 'lucide-react'
+import Avatar from 'boring-avatars'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
 
 interface Props {
@@ -27,15 +28,8 @@ interface Props {
     onClearError?: () => void
 }
 
-// Hash username to stable HSL color
-function nameToColor(name: string): string {
-    let hash = 0
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash)
-    }
-    const h = ((hash % 360) + 360) % 360
-    return `hsl(${h}, 65%, 45%)`
-}
+// Avatar color palette matching app theme
+const AVATAR_COLORS = ['#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#22c55e']
 
 // [P3-#14] Extracted reusable PlayerList component
 function PlayerList({
@@ -91,12 +85,12 @@ function PlayerList({
             {players.map((player) => (
                 <div key={player.identity} className="player-row">
                     <div className="player-info">
-                        <div
-                            className="player-avatar"
-                            style={{ background: nameToColor(player.displayName) }}
-                        >
-                            {player.displayName.charAt(0)}
-                        </div>
+                        <Avatar
+                            name={player.displayName}
+                            variant="beam"
+                            size={22}
+                            colors={AVATAR_COLORS}
+                        />
                         <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
                             <span /><span /><span /><span />
                         </div>
