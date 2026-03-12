@@ -158,11 +158,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
   gap: 12px;
 }
 
-/* macOS: extra top padding for traffic light buttons */
-@supports (-webkit-app-region: drag) {
-  .app-header-bar {
-    padding-top: 52px;
-  }
+/* macOS only: extra top padding for traffic light buttons */
+body.platform-darwin .app-header-bar {
+  padding-top: 52px;
 }
 
 /* Scrollable content area */
