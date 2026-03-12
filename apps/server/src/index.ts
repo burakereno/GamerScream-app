@@ -458,6 +458,11 @@ const PLAYER_CACHE_TTL = 10_000 // 10 seconds
 
 app.get('/api/room-players/:roomName', requireAccess, async (req, res) => {
     const roomName = req.params.roomName as string
+    // Evict stale entries to prevent memory leak
+    const now = Date.now()
+    for (const [key, val] of playerNamesCache) {
+        if (now - val.ts >= PLAYER_CACHE_TTL) playerNamesCache.delete(key)
+    }
     try {
         const cached = playerNamesCache.get(roomName)
         if (cached && Date.now() - cached.ts < PLAYER_CACHE_TTL) {

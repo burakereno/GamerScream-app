@@ -248,9 +248,13 @@ export function SessionControls({
     // Hover-based player names (on-demand fetch, not from SSE)
     const [hoverPlayers, setHoverPlayers] = useState<Record<string, string[]>>({})
     const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const hoverCacheTs = useRef<Record<string, number>>({})
 
     const handleChannelHover = useCallback((roomNameToFetch: string, playerCount: number) => {
         if (playerCount === 0) return
+        // Client-side 5s cache — skip fetch if data is fresh
+        const cached = hoverCacheTs.current[roomNameToFetch]
+        if (cached && Date.now() - cached < 5000 && hoverPlayers[roomNameToFetch]) return
         hoverTimerRef.current = setTimeout(async () => {
             try {
                 const token = (window as any).__gamerScreamAccessToken || ''
@@ -260,10 +264,11 @@ export function SessionControls({
                 if (res.ok) {
                     const data = await res.json()
                     setHoverPlayers(prev => ({ ...prev, [roomNameToFetch]: data.players }))
+                    hoverCacheTs.current[roomNameToFetch] = Date.now()
                 }
             } catch { /* ignore */ }
         }, 50)
-    }, [])
+    }, [hoverPlayers])
 
     const handleChannelLeave = useCallback(() => {
         if (hoverTimerRef.current) {
@@ -366,7 +371,7 @@ export function SessionControls({
                                         {ch.playerCount}
                                     </span>
                                 )}
-                                {hoverPlayers[`ch-${chNum}`] && hoverPlayers[`ch-${chNum}`].length > 0 && (
+                                {!isCurrent && hoverPlayers[`ch-${chNum}`] && hoverPlayers[`ch-${chNum}`].length > 0 && (
                                     <div className="channel-players-tooltip">
                                         {hoverPlayers[`ch-${chNum}`].map((name, i) => (
                                             <div key={i} className="channel-players-tooltip-item"><Avatar size={16} name={name} variant="beam" /> {name}</div>
@@ -419,7 +424,7 @@ export function SessionControls({
                                         <span className="channel-badge">{ch.playerCount}</span>
                                     )}
                                 </span>
-                                {hoverPlayers[customRoomName] && hoverPlayers[customRoomName].length > 0 && (
+                                {!isCurrent && hoverPlayers[customRoomName] && hoverPlayers[customRoomName].length > 0 && (
                                     <div className="channel-players-tooltip">
                                         {hoverPlayers[customRoomName].map((name: string, i: number) => (
                                             <div key={i} className="channel-players-tooltip-item"><Avatar size={16} name={name} variant="beam" /> {name}</div>
