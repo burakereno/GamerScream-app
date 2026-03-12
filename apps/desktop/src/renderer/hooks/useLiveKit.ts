@@ -64,7 +64,15 @@ export interface LiveKitCallbacks {
 export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true) {
     const [isConnected, setIsConnected] = useState(false)
     const [isConnecting, setIsConnecting] = useState(false)
+    const [isReconnecting, setIsReconnecting] = useState(false)
     const connectingRef = useRef(false) // Race condition guard
+    const intentionalDisconnectRef = useRef(false)
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const lastConnectParamsRef = useRef<{
+        username: string; channel: number; micDeviceId: string;
+        micLevel: number; customRoomName?: string; pin?: string;
+        noiseSuppression: number; joinSoundId: string
+    } | null>(null)
     const [isMuted, setIsMuted] = useState(false)
     const [players, setPlayers] = useState<ConnectedPlayer[]>([])
     const [roomName, setRoomName] = useState('')
@@ -286,6 +294,10 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
             // Fix #4: Race condition guard — prevent concurrent connect calls
             if (connectingRef.current) return
             connectingRef.current = true
+            intentionalDisconnectRef.current = false
+
+            // Save params for auto-reconnect
+            lastConnectParamsRef.current = { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId }
 
             // Fix #2: Full cleanup of previous session (AudioContext, mic stream, RNNoise)
             if (roomRef.current) {
@@ -388,7 +400,18 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     roomRef.current = null
                     // Fix #1: Clean up orphan audio elements
                     document.querySelectorAll<HTMLAudioElement>('audio[id^="audio-"]').forEach(el => el.remove())
-                    fetchChannels()
+
+                    // Auto-reconnect if not intentional
+                    if (!intentionalDisconnectRef.current && lastConnectParamsRef.current) {
+                        console.warn('[Reconnect] Unexpected disconnect — attempting auto-reconnect')
+                        attemptReconnect(0)
+                    } else {
+                        // Notify server of intentional leave
+                        fetch(`${SERVER_URL}/api/notify-leave`, {
+                            method: 'POST',
+                            headers: getAuthHeaders()
+                        }).catch(() => {})
+                    }
                 })
                 // DataChannel: receive join sound ID from other participants
                 room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant) => {
@@ -525,7 +548,40 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         [updatePlayerList, fetchChannels]
     )
 
+    // Auto-reconnect with exponential backoff
+    const attemptReconnect = useCallback(async (attempt: number) => {
+        const MAX_RETRIES = 5
+        const params = lastConnectParamsRef.current
+        if (!params || attempt >= MAX_RETRIES) {
+            setIsReconnecting(false)
+            console.warn(`[Reconnect] ${attempt >= MAX_RETRIES ? 'Max retries reached' : 'No params'} — giving up`)
+            return
+        }
+
+        setIsReconnecting(true)
+        const delay = Math.min(1000 * Math.pow(2, attempt), 16000) // 1s, 2s, 4s, 8s, 16s
+        console.log(`[Reconnect] Attempt ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`)
+
+        reconnectTimerRef.current = setTimeout(async () => {
+            try {
+                const { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId } = params
+                await connect(username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, '')
+                setIsReconnecting(false)
+                console.log('[Reconnect] Success!')
+            } catch {
+                attemptReconnect(attempt + 1)
+            }
+        }, delay)
+    }, [connect])
+
+    const cancelReconnect = useCallback(() => {
+        if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
+        setIsReconnecting(false)
+    }, [])
+
     const disconnect = useCallback(async () => {
+        intentionalDisconnectRef.current = true
+        cancelReconnect()
         if (roomRef.current) {
             await roomRef.current.disconnect()
             roomRef.current = null
@@ -674,6 +730,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     return {
         isConnected,
         isConnecting,
+        isReconnecting,
         isMuted,
         isVadGateOpen,
         allMuted,
@@ -683,6 +740,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         rnnoiseActive,
         connect,
         disconnect,
+        cancelReconnect,
         toggleMute,
         setMuted,
         toggleMuteAll,

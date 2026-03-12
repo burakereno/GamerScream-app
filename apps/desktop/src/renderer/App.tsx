@@ -69,8 +69,8 @@ export default function App() {
     const [showAdmin, setShowAdmin] = useState(false)
 
     const {
-        isConnected, isConnecting, isMuted, isVadGateOpen, allMuted, players, roomName, channels,
-        rnnoiseActive, connect, disconnect, toggleMute, setMuted, toggleMuteAll, setPlayerVolume,
+        isConnected, isConnecting, isReconnecting, isMuted, isVadGateOpen, allMuted, players, roomName, channels,
+        rnnoiseActive, connect, disconnect, cancelReconnect, toggleMute, setMuted, toggleMuteAll, setPlayerVolume,
         createChannel, verifyPin, setMicGain, setNoiseSuppressionLevel, getRawMicLevel, setVadGate, setVadActive,
         setSpeakerDevice
     } = useLiveKit({
@@ -206,7 +206,7 @@ export default function App() {
 
     // [P2-#12] Auto-connect on launch — requires accessVerified
     useEffect(() => {
-        if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !autoConnectDone.current) {
+        if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !isReconnecting && !autoConnectDone.current) {
             autoConnectDone.current = true
             connect(settings.username, settings.channel, selectedMic, micLevel, undefined, undefined, settings.noiseSuppression, settings.joinSoundId).catch((err) => {
                 setConnectError(err instanceof Error ? err.message : 'Auto-connect failed')
@@ -513,6 +513,7 @@ export default function App() {
                     <SessionControls
                         isConnected={isConnected}
                         isConnecting={isConnecting}
+                        isReconnecting={isReconnecting}
                         isMuted={isMuted}
                         isVadGateOpen={isVadGateOpen}
                         allMuted={allMuted}

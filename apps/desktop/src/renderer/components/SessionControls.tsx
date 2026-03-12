@@ -6,6 +6,7 @@ import type { ConnectedPlayer, ChannelInfo } from '../types'
 interface Props {
     isConnected: boolean
     isConnecting: boolean
+    isReconnecting: boolean
     isMuted: boolean
     isVadGateOpen: boolean
     allMuted: boolean
@@ -85,15 +86,15 @@ function PlayerList({
             {players.map((player) => (
                 <div key={player.identity} className="player-row">
                     <div className="player-info">
+                        <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
+                            <span /><span /><span /><span />
+                        </div>
                         <Avatar
                             name={player.displayName}
                             variant="beam"
                             size={22}
                             colors={AVATAR_COLORS}
                         />
-                        <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
-                            <span /><span /><span /><span />
-                        </div>
                         <span className="player-name">
                             {player.displayName}
                             {player.isLocal && ' (you)'}
@@ -129,6 +130,7 @@ function PlayerList({
 export function SessionControls({
     isConnected,
     isConnecting,
+    isReconnecting,
     isMuted,
     isVadGateOpen,
     allMuted,
@@ -258,11 +260,12 @@ export function SessionControls({
                             onConnect()
                         }
                     }}
-                    disabled={isConnecting}
+                    disabled={isConnecting || isReconnecting}
                 >
-                    {isConnecting ? 'Connecting...' :
-                        isConnected ? <><Unplug size={14} /> Disconnect</> :
-                            <><Plug size={14} /> Connect</>
+                    {isReconnecting ? 'Reconnecting...' :
+                        isConnecting ? 'Connecting...' :
+                            isConnected ? <><Unplug size={14} /> Disconnect</> :
+                                <><Plug size={14} /> Connect</>
                     }
                 </button>
 
