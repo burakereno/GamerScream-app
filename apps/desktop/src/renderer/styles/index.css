@@ -798,7 +798,7 @@ input[type="range"]:active::-webkit-slider-thumb {
 
 .channel-players-tooltip {
   position: absolute;
-  left: 0;
+  right: 0;
   top: calc(100% + 4px);
   background: #1a1a1e;
   border: 1px solid rgba(255,255,255,0.1);
