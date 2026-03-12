@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X } from 'lucide-react'
 import Avatar from 'boring-avatars'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
+
+const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
 interface Props {
     isConnected: boolean
@@ -243,6 +245,33 @@ export function SessionControls({
         }
     }
 
+    // Hover-based player names (on-demand fetch, not from SSE)
+    const [hoverPlayers, setHoverPlayers] = useState<Record<string, string[]>>({})
+    const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const handleChannelHover = useCallback((roomNameToFetch: string, playerCount: number) => {
+        if (playerCount === 0) return
+        hoverTimerRef.current = setTimeout(async () => {
+            try {
+                const token = (window as any).__gamerScreamAccessToken || ''
+                const res = await fetch(`${SERVER_URL}/api/room-players/${roomNameToFetch}`, {
+                    headers: { 'x-access-token': token }
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    setHoverPlayers(prev => ({ ...prev, [roomNameToFetch]: data.players }))
+                }
+            } catch { /* ignore */ }
+        }, 300)
+    }, [])
+
+    const handleChannelLeave = useCallback(() => {
+        if (hoverTimerRef.current) {
+            clearTimeout(hoverTimerRef.current)
+            hoverTimerRef.current = null
+        }
+    }, [])
+
     return (
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h2 className="card-title" onClick={handleTitleClick} style={{ userSelect: 'none' }}><Plug size={14} /> Session</h2>
@@ -324,6 +353,8 @@ export function SessionControls({
                                 className={`channel-item ${isActive ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
+                                onMouseEnter={() => handleChannelHover(`ch-${chNum}`, ch.playerCount)}
+                                onMouseLeave={handleChannelLeave}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
@@ -333,6 +364,13 @@ export function SessionControls({
                                     <span className="channel-badge">
                                         {ch.playerCount}
                                     </span>
+                                )}
+                                {hoverPlayers[`ch-${chNum}`] && hoverPlayers[`ch-${chNum}`].length > 0 && (
+                                    <div className="channel-players-tooltip">
+                                        {hoverPlayers[`ch-${chNum}`].map((name, i) => (
+                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                        ))}
+                                    </div>
                                 )}
                             </button>
 
@@ -367,6 +405,8 @@ export function SessionControls({
                                 className={`channel-item ${isSelected ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
+                                onMouseEnter={() => handleChannelHover(customRoomName, ch.playerCount)}
+                                onMouseLeave={handleChannelLeave}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
@@ -378,6 +418,13 @@ export function SessionControls({
                                         <span className="channel-badge">{ch.playerCount}</span>
                                     )}
                                 </span>
+                                {hoverPlayers[customRoomName] && hoverPlayers[customRoomName].length > 0 && (
+                                    <div className="channel-players-tooltip">
+                                        {hoverPlayers[customRoomName].map((name: string, i: number) => (
+                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                        ))}
+                                    </div>
+                                )}
                             </button>
 
                             {isCurrent && players.length > 0 && (

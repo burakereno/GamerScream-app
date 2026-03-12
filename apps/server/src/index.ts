@@ -451,6 +451,27 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
     }
 })
 
+// On-demand player names for channel hover tooltip
+// Uses 10s cache to avoid hammering LiveKit API
+const playerNamesCache = new Map<string, { names: string[]; ts: number }>()
+const PLAYER_CACHE_TTL = 10_000 // 10 seconds
+
+app.get('/api/room-players/:roomName', requireAccess, async (req, res) => {
+    const roomName = req.params.roomName as string
+    try {
+        const cached = playerNamesCache.get(roomName)
+        if (cached && Date.now() - cached.ts < PLAYER_CACHE_TTL) {
+            return res.json({ players: cached.names })
+        }
+        const participants = await roomService.listParticipants(roomName)
+        const names = participants.map((p: any) => p.name || p.identity)
+        playerNamesCache.set(roomName, { names, ts: Date.now() })
+        res.json({ players: names })
+    } catch {
+        res.json({ players: [] })
+    }
+})
+
 // SSE endpoint — real-time channel updates
 // Auth via query param since EventSource doesn't support custom headers
 app.get('/api/events', (req, res) => {
