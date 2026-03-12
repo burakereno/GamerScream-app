@@ -324,7 +324,6 @@ export function SessionControls({
                                 className={`channel-item ${isActive ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
-                                title={ch.playerNames && ch.playerNames.length > 0 ? ch.playerNames.join(', ') : undefined}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
@@ -334,6 +333,13 @@ export function SessionControls({
                                     <span className="channel-badge">
                                         {ch.playerCount}
                                     </span>
+                                )}
+                                {ch.playerNames && ch.playerNames.length > 0 && (
+                                    <div className="channel-players-tooltip">
+                                        {ch.playerNames.map((name, i) => (
+                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                        ))}
+                                    </div>
                                 )}
                             </button>
 
@@ -368,7 +374,6 @@ export function SessionControls({
                                 className={`channel-item ${isSelected ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
-                                title={ch.playerNames && ch.playerNames.length > 0 ? ch.playerNames.join(', ') : undefined}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
@@ -380,6 +385,13 @@ export function SessionControls({
                                         <span className="channel-badge">{ch.playerCount}</span>
                                     )}
                                 </span>
+                                {ch.playerNames && ch.playerNames.length > 0 && (
+                                    <div className="channel-players-tooltip">
+                                        {ch.playerNames.map((name, i) => (
+                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                        ))}
+                                    </div>
+                                )}
                             </button>
 
                             {isCurrent && players.length > 0 && (
