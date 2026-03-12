@@ -26,18 +26,37 @@ function getAuthHeaders(): Record<string, string> {
     return headers
 }
 
-// Generate or retrieve a persistent device ID
+// Device ID: file-based storage via IPC (survives cache clears)
+// Falls back to localStorage for migration & environments without IPC (tests)
 const DEVICE_ID_KEY = 'gamerscream-device-id'
-function getDeviceId(): string {
-    let id = localStorage.getItem(DEVICE_ID_KEY)
-    if (!id) {
-        id = crypto.randomUUID()
-        localStorage.setItem(DEVICE_ID_KEY, id)
+let deviceId = '' // Set asynchronously by initDeviceId
+
+async function initDeviceId(): Promise<string> {
+    const api = (window as any).electronAPI
+    if (api?.getDeviceId) {
+        // Try file-based store first
+        const fileId = await api.getDeviceId()
+        if (fileId) { deviceId = fileId; return fileId }
+
+        // Migrate from localStorage if exists
+        const lsId = localStorage.getItem(DEVICE_ID_KEY)
+        if (lsId) {
+            await api.setDeviceId(lsId)
+            deviceId = lsId
+            return lsId
+        }
     }
-    return id
+
+    // Generate new + persist everywhere
+    const newId = crypto.randomUUID()
+    if (api?.setDeviceId) await api.setDeviceId(newId)
+    localStorage.setItem(DEVICE_ID_KEY, newId) // Keep localStorage as fallback
+    deviceId = newId
+    return newId
 }
 
-const deviceId = getDeviceId()
+// Fire-and-forget init — deviceId will be set before first connect()
+initDeviceId()
 
 // Helper: extract device ID from participant metadata
 function getParticipantDeviceId(participant: RemoteParticipant | { metadata?: string | null }): string {

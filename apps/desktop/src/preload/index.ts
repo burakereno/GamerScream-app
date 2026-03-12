@@ -52,5 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setStoredToken: (token: string) => ipcRenderer.invoke('set-stored-token', token),
     removeStoredToken: () => ipcRenderer.invoke('remove-stored-token'),
     getStoredSettings: () => ipcRenderer.invoke('get-stored-settings'),
-    setStoredSettings: (data: string) => ipcRenderer.invoke('set-stored-settings', data)
+    setStoredSettings: (data: string) => ipcRenderer.invoke('set-stored-settings', data),
+    getDeviceId: () => ipcRenderer.invoke('get-device-id'),
+    setDeviceId: (id: string) => ipcRenderer.invoke('set-device-id', id)
 })

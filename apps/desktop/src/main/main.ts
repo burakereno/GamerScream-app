@@ -366,3 +366,30 @@ ipcMain.handle('set-stored-settings', (_event, data: string) => {
         return false
     }
 })
+
+// ── Persistent device ID storage (survives cache clears) ──
+function getDeviceIdPath(): string {
+    const dir = app.getPath('userData')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    return join(dir, 'device-id.json')
+}
+
+ipcMain.handle('get-device-id', () => {
+    try {
+        const p = getDeviceIdPath()
+        if (!existsSync(p)) return null
+        const data = JSON.parse(readFileSync(p, 'utf-8'))
+        return data.deviceId || null
+    } catch {
+        return null
+    }
+})
+
+ipcMain.handle('set-device-id', (_event, id: string) => {
+    try {
+        writeFileSync(getDeviceIdPath(), JSON.stringify({ deviceId: id }), 'utf-8')
+        return true
+    } catch {
+        return false
+    }
+})
