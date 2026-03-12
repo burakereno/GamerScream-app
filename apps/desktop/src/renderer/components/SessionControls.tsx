@@ -369,7 +369,7 @@ export function SessionControls({
                                 {hoverPlayers[`ch-${chNum}`] && hoverPlayers[`ch-${chNum}`].length > 0 && (
                                     <div className="channel-players-tooltip">
                                         {hoverPlayers[`ch-${chNum}`].map((name, i) => (
-                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                            <div key={i} className="channel-players-tooltip-item">{name}</div>
                                         ))}
                                     </div>
                                 )}
@@ -422,7 +422,7 @@ export function SessionControls({
                                 {hoverPlayers[customRoomName] && hoverPlayers[customRoomName].length > 0 && (
                                     <div className="channel-players-tooltip">
                                         {hoverPlayers[customRoomName].map((name: string, i: number) => (
-                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
+                                            <div key={i} className="channel-players-tooltip-item">{name}</div>
                                         ))}
                                     </div>
                                 )}
