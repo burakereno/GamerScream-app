@@ -324,6 +324,7 @@ export function SessionControls({
                                 className={`channel-item ${isActive ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
+                                title={ch.playerNames && ch.playerNames.length > 0 ? ch.playerNames.join(', ') : undefined}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
@@ -367,6 +368,7 @@ export function SessionControls({
                                 className={`channel-item ${isSelected ? 'channel-item-active' : ''} ${isCurrent ? 'channel-item-connected' : ''}`}
                                 onClick={() => handleChannelClick(ch)}
                                 disabled={isConnected && !isCurrent}
+                                title={ch.playerNames && ch.playerNames.length > 0 ? ch.playerNames.join(', ') : undefined}
                             >
                                 <span className="channel-name">
                                     <Hash size={13} style={{ opacity: 0.5 }} />
