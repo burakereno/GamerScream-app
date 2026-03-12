@@ -156,9 +156,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(17, 17, 17, 0.82);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  background: var(--bg-primary);
   padding: 12px 0 12px;
   margin: 0 -24px;
   padding-left: 24px;
@@ -199,6 +197,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
    SEGMENTED CONTROL (iOS-style)
    ============================================ */
 .segmented-control {
+  -webkit-app-region: no-drag;
   display: flex;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
