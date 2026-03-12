@@ -45,5 +45,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onPttRegisterFailed: (callback: (key: string) => void) => {
         ipcRenderer.removeAllListeners('ptt-register-failed')
         ipcRenderer.on('ptt-register-failed', (_event, key) => callback(key))
-    }
+    },
+
+    // Persistent token storage (file-based, works on unsigned macOS)
+    getStoredToken: () => ipcRenderer.invoke('get-stored-token'),
+    setStoredToken: (token: string) => ipcRenderer.invoke('set-stored-token', token),
+    removeStoredToken: () => ipcRenderer.invoke('remove-stored-token')
 })

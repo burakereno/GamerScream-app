@@ -14,10 +14,9 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.8.3'
+const APP_VERSION = '1.8.4'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
-const ACCESS_TOKEN_KEY = 'gamerscream-access-token'
 
 // Human-readable key names from keyboard event codes
 function formatKeyName(code: string): string {
@@ -88,7 +87,7 @@ export default function App() {
         },
         // [P2-1] Token expired — clear and show PIN screen
         onAuthExpired: () => {
-            localStorage.removeItem(ACCESS_TOKEN_KEY)
+            window.electronAPI?.removeStoredToken?.()
             window.__gamerScreamAccessToken = undefined
             setAccessVerified(false)
         }
@@ -127,33 +126,33 @@ export default function App() {
 
     // On mount: check if stored access token is still valid
     useEffect(() => {
-        const stored = localStorage.getItem(ACCESS_TOKEN_KEY)
-        if (!stored) {
-            setCheckingAccess(false)
-            return
-        }
-        fetch(`${SERVER_URL}/api/verify-access-token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessToken: stored })
-        })
-            .then(r => r.json())
-            .then(data => {
+        (async () => {
+            const stored = await window.electronAPI?.getStoredToken?.() || null
+            if (!stored) {
+                setCheckingAccess(false)
+                return
+            }
+            try {
+                const r = await fetch(`${SERVER_URL}/api/verify-access-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accessToken: stored })
+                })
+                const data = await r.json()
                 if (data.valid) {
                     setAccessVerified(true)
-                    // Store globally for API calls
                     window.__gamerScreamAccessToken = stored
                 } else {
-                    localStorage.removeItem(ACCESS_TOKEN_KEY)
+                    window.electronAPI?.removeStoredToken?.()
                 }
-            })
-            .catch(() => {
+            } catch {
                 // Server unreachable — trust the stored token
-                // Individual API calls will reject with 401 if token is invalid
                 setAccessVerified(true)
                 window.__gamerScreamAccessToken = stored
-            })
-            .finally(() => setCheckingAccess(false))
+            } finally {
+                setCheckingAccess(false)
+            }
+        })()
     }, [])
 
     const handlePinSubmit = async (pin: string): Promise<boolean> => {
@@ -166,7 +165,7 @@ export default function App() {
             if (!res.ok) return false
             const data = await res.json()
             if (data.accessToken) {
-                localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
+                await window.electronAPI?.setStoredToken?.(data.accessToken)
                 window.__gamerScreamAccessToken = data.accessToken
                 setAccessVerified(true)
                 return true

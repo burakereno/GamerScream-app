@@ -13,6 +13,10 @@ export interface ElectronAPI {
     cancelPttTimer: () => void
     pttRelease: () => void
     onPttRegisterFailed: (callback: (key: string) => void) => void
+    // Persistent token storage (file-based)
+    getStoredToken: () => Promise<string | null>
+    setStoredToken: (token: string) => Promise<boolean>
+    removeStoredToken: () => Promise<boolean>
 }
 
 declare global {

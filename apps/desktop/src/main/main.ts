@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut, shell } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs'
 import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
@@ -289,4 +290,41 @@ ipcMain.on('ptt-release', () => {
 // Clean up global shortcuts on quit
 app.on('will-quit', () => {
     globalShortcut.unregisterAll()
+})
+
+// ── Persistent token storage (file-based, immune to macOS translocation) ──
+function getTokenPath(): string {
+    const dir = app.getPath('userData')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    return join(dir, 'auth-token.json')
+}
+
+ipcMain.handle('get-stored-token', () => {
+    try {
+        const tokenPath = getTokenPath()
+        if (!existsSync(tokenPath)) return null
+        const data = JSON.parse(readFileSync(tokenPath, 'utf-8'))
+        return data.accessToken || null
+    } catch {
+        return null
+    }
+})
+
+ipcMain.handle('set-stored-token', (_event, token: string) => {
+    try {
+        writeFileSync(getTokenPath(), JSON.stringify({ accessToken: token }), 'utf-8')
+        return true
+    } catch {
+        return false
+    }
+})
+
+ipcMain.handle('remove-stored-token', () => {
+    try {
+        const tokenPath = getTokenPath()
+        if (existsSync(tokenPath)) unlinkSync(tokenPath)
+        return true
+    } catch {
+        return false
+    }
 })
