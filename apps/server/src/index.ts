@@ -185,12 +185,18 @@ const customChannels = new Map<string, CustomChannel>()
 // SSE (Server-Sent Events) for real-time channel updates
 // ============================================
 const sseClients = new Set<express.Response>()
+const MAX_SSE_CLIENTS = 50 // Prevent DoS from too many SSE connections
 let lastBroadcastJSON = '' // Track last sent data for diff detection
 
-function sseWrite(res: express.Response, event: string, data: unknown) {
+function sseWrite(res: express.Response, event: string, data: unknown): boolean {
     try {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    } catch { /* client disconnected */ }
+        return true
+    } catch {
+        // Client disconnected — remove from set
+        sseClients.delete(res)
+        return false
+    }
 }
 
 async function broadcastRooms() {
@@ -443,6 +449,12 @@ app.get('/api/events', (req, res) => {
         return
     }
 
+    // Limit concurrent SSE connections
+    if (sseClients.size >= MAX_SSE_CLIENTS) {
+        res.status(503).json({ error: 'Too many connections' })
+        return
+    }
+
     // SSE headers
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -452,10 +464,10 @@ app.get('/api/events', (req, res) => {
     })
     res.flushHeaders()
 
-    // Send initial room state immediately
+    // Send initial room state immediately (don't update lastBroadcastJSON —
+    // that's only for detecting changes across broadcasts)
     buildRoomList().then(rooms => {
         sseWrite(res, 'rooms', { rooms })
-        lastBroadcastJSON = JSON.stringify(rooms)
     }).catch(() => {
         sseWrite(res, 'rooms', { rooms: [1,2,3,4,5].map(ch => ({ channel: ch, name: `ch-${ch}`, playerCount: 0 })) })
     })
