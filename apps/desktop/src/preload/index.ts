@@ -50,5 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Persistent token storage (file-based, works on unsigned macOS)
     getStoredToken: () => ipcRenderer.invoke('get-stored-token'),
     setStoredToken: (token: string) => ipcRenderer.invoke('set-stored-token', token),
-    removeStoredToken: () => ipcRenderer.invoke('remove-stored-token')
+    removeStoredToken: () => ipcRenderer.invoke('remove-stored-token'),
+    getStoredSettings: () => ipcRenderer.invoke('get-stored-settings'),
+    setStoredSettings: (data: string) => ipcRenderer.invoke('set-stored-settings', data)
 })

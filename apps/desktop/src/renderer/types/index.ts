@@ -17,6 +17,8 @@ export interface ElectronAPI {
     getStoredToken: () => Promise<string | null>
     setStoredToken: (token: string) => Promise<boolean>
     removeStoredToken: () => Promise<boolean>
+    getStoredSettings: () => Promise<Record<string, unknown> | null>
+    setStoredSettings: (data: string) => Promise<boolean>
 }
 
 declare global {

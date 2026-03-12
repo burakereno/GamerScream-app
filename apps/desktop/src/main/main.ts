@@ -328,3 +328,29 @@ ipcMain.handle('remove-stored-token', () => {
         return false
     }
 })
+
+// ── Persistent settings storage ──
+function getSettingsPath(): string {
+    const dir = app.getPath('userData')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    return join(dir, 'settings.json')
+}
+
+ipcMain.handle('get-stored-settings', () => {
+    try {
+        const p = getSettingsPath()
+        if (!existsSync(p)) return null
+        return JSON.parse(readFileSync(p, 'utf-8'))
+    } catch {
+        return null
+    }
+})
+
+ipcMain.handle('set-stored-settings', (_event, data: string) => {
+    try {
+        writeFileSync(getSettingsPath(), data, 'utf-8')
+        return true
+    } catch {
+        return false
+    }
+})
