@@ -426,6 +426,14 @@ async function buildRoomList() {
     return rooms
 }
 
+// Notify server that a client has left a channel → immediate broadcast
+app.post('/api/notify-leave', requireAccess, (_req, res) => {
+    res.json({ ok: true })
+    // Immediate + delayed broadcast (LiveKit takes ~500ms to remove participant)
+    scheduleBroadcast()
+    setTimeout(() => broadcastRooms(), 1000)
+})
+
 // List rooms with participant counts (default + custom)
 app.get('/api/rooms', requireAccess, async (_req, res) => {
     try {

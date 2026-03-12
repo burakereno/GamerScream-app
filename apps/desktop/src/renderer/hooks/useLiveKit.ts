@@ -556,8 +556,12 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         setIsMuted(false)
         setPlayers([])
         setRoomName('')
-        fetchChannels()
-    }, [fetchChannels])
+        // Notify server so all SSE clients get instant update
+        fetch(`${SERVER_URL}/api/notify-leave`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        }).catch(() => { /* fire-and-forget */ })
+    }, [])
 
     const toggleMute = useCallback(async () => {
         if (!roomRef.current) return
