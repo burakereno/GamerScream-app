@@ -417,14 +417,15 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     setAllMuted(false) // Fix #11: Reset allMuted on disconnect
                     setPlayers([])
                     roomRef.current = null
+                    connectingRef.current = false // Allow future connect() calls
                     // Fix #1: Clean up orphan audio elements
                     document.querySelectorAll<HTMLAudioElement>('audio[id^="audio-"]').forEach(el => el.remove())
 
-                    // Auto-reconnect if not intentional
-                    if (!intentionalDisconnectRef.current && lastConnectParamsRef.current) {
+                    // Auto-reconnect if not intentional AND not already reconnecting
+                    if (!intentionalDisconnectRef.current && lastConnectParamsRef.current && !isReconnecting) {
                         console.warn('[Reconnect] Unexpected disconnect — attempting auto-reconnect')
                         attemptReconnect(0)
-                    } else {
+                    } else if (intentionalDisconnectRef.current) {
                         // Notify server of intentional leave
                         fetch(`${SERVER_URL}/api/notify-leave`, {
                             method: 'POST',
