@@ -804,6 +804,9 @@ input[type="range"]:active::-webkit-slider-thumb {
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   z-index: 100;
   min-width: 140px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
