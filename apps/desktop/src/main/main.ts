@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, Menu, screen, globalShortcut, shell, Notification as ElectronNotification } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs'
 import { autoUpdater } from 'electron-updater'
@@ -185,10 +185,16 @@ ipcMain.handle('install-update', () => {
 
 // Overlay notification — shows over fullscreen games
 ipcMain.on('show-notification', (_event, { title, body }: { title: string; body: string }) => {
-    // Extract name from body like "Burak joined the channel"
-    const name = body.replace(/ (joined|left).*/, '') || title
-    const type = body.includes('left') ? 'leave' : 'join'
-    showOverlay(name, type)
+    if (process.platform === 'darwin') {
+        // macOS: use native Notification (overlay BrowserWindow crashes unsigned apps)
+        const notification = new ElectronNotification({ title, body })
+        notification.show()
+    } else {
+        // Windows: custom overlay (works over fullscreen games)
+        const name = body.replace(/ (joined|left).*/, '') || title
+        const type = body.includes('left') ? 'leave' : 'join'
+        showOverlay(name, type)
+    }
 })
 
 // ── Push-to-Talk global hotkey ──
