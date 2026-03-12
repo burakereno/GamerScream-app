@@ -270,6 +270,7 @@ export function SessionControls({
             clearTimeout(hoverTimerRef.current)
             hoverTimerRef.current = null
         }
+        setHoverPlayers({})
     }, [])
 
     return (
