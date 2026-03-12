@@ -288,7 +288,10 @@ app.post('/api/token', requireAccess, async (req, res) => {
         })
 
         // Push updated room list to all SSE clients (someone just joined)
+        // Two broadcasts: immediate (catches others) + delayed (catches the joiner
+        // after their LiveKit connection completes, ~1-2s)
         scheduleBroadcast()
+        setTimeout(() => broadcastRooms(), 2000)
 
     } catch (err) {
         console.error('Token generation error:', err)
