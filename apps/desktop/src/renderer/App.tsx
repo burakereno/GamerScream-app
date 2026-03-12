@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.8.7'
+const APP_VERSION = '1.8.8'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -94,6 +94,12 @@ export default function App() {
     }, accessVerified)  // ← Gate polling on accessVerified
 
     const [hasEnteredName, setHasEnteredName] = useState(!!settings.username)
+
+    // Sync hasEnteredName when settings recover from file (macOS async recovery)
+    useEffect(() => {
+        if (settings.username) setHasEnteredName(true)
+    }, [settings.username])
+
     const [connectError, setConnectError] = useState<string | null>(null)
     const autoConnectDone = useRef(false)
     const [recordingKeybind, setRecordingKeybind] = useState(false)
