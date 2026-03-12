@@ -811,6 +811,9 @@ input[type="range"]:active::-webkit-slider-thumb {
 }
 
 .channel-players-tooltip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: #e4e4e7;
   padding: 3px 0;
