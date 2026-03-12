@@ -1,15 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import {
+import type {
     Room,
-    RoomEvent,
-    Track,
     RemoteParticipant,
     RemoteTrackPublication
 } from 'livekit-client'
-import {
-    RnnoiseWorkletNode,
-    loadRnnoise
-} from '@sapphi-red/web-noise-suppressor'
+import type { RnnoiseWorkletNode } from '@sapphi-red/web-noise-suppressor'
+// Vite ?url imports — must stay static (build-time asset resolution)
 import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'
 import rnnoiseSimdWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'
@@ -358,7 +354,11 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
                 const { token, livekitUrl } = await res.json()
 
-                const room = new Room({
+                // Lazy load heavy modules — only loaded on first connect
+                const { Room: RoomClass, RoomEvent, Track } = await import('livekit-client')
+                const { RnnoiseWorkletNode: RnnoiseNode, loadRnnoise } = await import('@sapphi-red/web-noise-suppressor')
+
+                const room = new RoomClass({
                     audioCaptureDefaults: {
                         deviceId: micDeviceId || undefined
                     }
@@ -483,7 +483,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                                 url: rnnoiseWasmUrl,
                                 simdUrl: rnnoiseSimdWasmUrl
                             })
-                            const rnnoiseNode = new RnnoiseWorkletNode(ctx, {
+                            const rnnoiseNode = new RnnoiseNode(ctx, {
                                 maxChannels: 1,
                                 wasmBinary
                             })
