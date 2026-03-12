@@ -151,28 +151,86 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         }
     }, [enabled])
 
-    // [P2-6] Visibility-aware polling — pause when window is hidden
-    // Only start polling when enabled (accessVerified) to prevent race condition
+    // [P2-6] SSE — real-time channel updates via Server-Sent Events
+    // Server pushes when someone joins/leaves. No client polling needed.
+    // Falls back to 10s polling if SSE unavailable (old server).
+    const sseRef = useRef<EventSource | null>(null)
+    const sseErrorCount = useRef(0)
+    const sseAvailable = useRef(true) // Assume SSE available until proven otherwise
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+    const startPollingFallback = useCallback(() => {
+        if (pollingRef.current) return
+        fetchChannels()
+        pollingRef.current = setInterval(fetchChannels, 10_000)
+    }, [fetchChannels])
+
+    const stopPollingFallback = useCallback(() => {
+        if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+    }, [])
+
+    const connectSSE = useCallback(() => {
+        if (!enabled) return
+        // Close existing
+        if (sseRef.current) { sseRef.current.close(); sseRef.current = null }
+
+        // If SSE proved unavailable, use polling fallback
+        if (!sseAvailable.current) {
+            startPollingFallback()
+            return
+        }
+
+        const token = window.__gamerScreamAccessToken
+        if (!token) return
+
+        stopPollingFallback()
+        const es = new EventSource(`${SERVER_URL}/api/events?token=${encodeURIComponent(token)}`)
+
+        es.addEventListener('rooms', (e) => {
+            try {
+                const data = JSON.parse(e.data)
+                setChannels(data.rooms || [])
+                sseErrorCount.current = 0 // Reset on success
+            } catch { /* bad data */ }
+        })
+
+        es.onerror = () => {
+            sseErrorCount.current++
+            if (sseErrorCount.current >= 3 || es.readyState === EventSource.CLOSED) {
+                // SSE failed repeatedly — switch to polling fallback
+                es.close()
+                sseRef.current = null
+                sseAvailable.current = false
+                console.warn('[SSE] Unavailable — falling back to polling')
+                startPollingFallback()
+            }
+        }
+
+        sseRef.current = es
+    }, [enabled, startPollingFallback, stopPollingFallback])
+
+    // Open/close SSE based on access + visibility
     useEffect(() => {
         if (!enabled) return
-        fetchChannels()
-        let interval: ReturnType<typeof setInterval> | null = setInterval(fetchChannels, 2000)
+
+        connectSSE()
 
         const handleVisibility = () => {
             if (document.hidden) {
-                if (interval) { clearInterval(interval); interval = null }
+                if (sseRef.current) { sseRef.current.close(); sseRef.current = null }
+                stopPollingFallback()
             } else {
-                fetchChannels()
-                if (!interval) interval = setInterval(fetchChannels, 2000)
+                connectSSE()
             }
         }
         document.addEventListener('visibilitychange', handleVisibility)
 
         return () => {
-            if (interval) clearInterval(interval)
+            if (sseRef.current) { sseRef.current.close(); sseRef.current = null }
+            stopPollingFallback()
             document.removeEventListener('visibilitychange', handleVisibility)
         }
-    }, [fetchChannels, enabled])
+    }, [connectSSE, stopPollingFallback, enabled])
 
     const setPlayerVolume = useCallback((identity: string, volume: number) => {
         // Find the remote participant to get their device ID

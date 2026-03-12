@@ -181,6 +181,45 @@ interface CustomChannel {
 
 const customChannels = new Map<string, CustomChannel>()
 
+// ============================================
+// SSE (Server-Sent Events) for real-time channel updates
+// ============================================
+const sseClients = new Set<express.Response>()
+let lastBroadcastJSON = '' // Track last sent data for diff detection
+
+function sseWrite(res: express.Response, event: string, data: unknown) {
+    try {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    } catch { /* client disconnected */ }
+}
+
+async function broadcastRooms() {
+    if (sseClients.size === 0) return
+    try {
+        const rooms = await buildRoomList()
+        const json = JSON.stringify(rooms)
+        // Only push if data actually changed
+        if (json === lastBroadcastJSON) return
+        lastBroadcastJSON = json
+        for (const client of sseClients) {
+            sseWrite(client, 'rooms', { rooms })
+        }
+    } catch (err) {
+        console.error('SSE broadcast error:', err)
+    }
+}
+
+// Debounce broadcasts — when multiple events fire close together (e.g. join triggers)
+// only send one push. Server-side interval handles periodic diff checks for leaves.
+let broadcastTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleBroadcast() {
+    if (broadcastTimer) return
+    broadcastTimer = setTimeout(() => {
+        broadcastTimer = null
+        broadcastRooms()
+    }, 500) // 500ms debounce
+}
+
 // Health check
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -242,6 +281,9 @@ app.post('/api/token', requireAccess, async (req, res) => {
             livekitUrl: LIVEKIT_CLIENT_URL
         })
 
+        // Push updated room list to all SSE clients (someone just joined)
+        scheduleBroadcast()
+
     } catch (err) {
         console.error('Token generation error:', err)
         res.status(500).json({ error: 'Failed to generate token' })
@@ -287,6 +329,10 @@ app.post('/api/channels', requireAccess, (req, res) => {
             roomName,
             hasPin: !!pin
         })
+
+        // Push updated room list (new channel created)
+        scheduleBroadcast()
+
     } catch (err) {
         console.error('Channel creation error:', err)
         res.status(500).json({ error: 'Failed to create channel' })
@@ -387,6 +433,53 @@ app.get('/api/rooms', requireAccess, async (_req, res) => {
         })
     }
 })
+
+// SSE endpoint — real-time channel updates
+// Auth via query param since EventSource doesn't support custom headers
+app.get('/api/events', (req, res) => {
+    const token = (req.query.token as string) || ''
+    if (!isValidAccessToken(token)) {
+        res.status(401).json({ error: 'Unauthorized' })
+        return
+    }
+
+    // SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no' // Disable nginx buffering
+    })
+    res.flushHeaders()
+
+    // Send initial room state immediately
+    buildRoomList().then(rooms => {
+        sseWrite(res, 'rooms', { rooms })
+        lastBroadcastJSON = JSON.stringify(rooms)
+    }).catch(() => {
+        sseWrite(res, 'rooms', { rooms: [1,2,3,4,5].map(ch => ({ channel: ch, name: `ch-${ch}`, playerCount: 0 })) })
+    })
+
+    // Keep-alive ping every 30s to prevent proxy/firewall timeouts
+    const keepAlive = setInterval(() => {
+        try { res.write(': ping\n\n') } catch { /* disconnected */ }
+    }, 30_000)
+
+    sseClients.add(res)
+    console.log(`📡 SSE client connected (${sseClients.size} total)`)
+
+    req.on('close', () => {
+        sseClients.delete(res)
+        clearInterval(keepAlive)
+        console.log(`📡 SSE client disconnected (${sseClients.size} total)`)
+    })
+})
+
+// Server-side periodic check for participant changes (leaves, timeouts)
+// Only runs when SSE clients are connected — pushes only if data changed
+setInterval(() => {
+    if (sseClients.size > 0) broadcastRooms()
+}, 5000)
 
 // Cleanup: periodically remove old rate limit entries
 setInterval(() => {
