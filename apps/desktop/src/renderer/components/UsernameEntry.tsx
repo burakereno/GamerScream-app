@@ -6,7 +6,7 @@ interface Props {
     onSubmit: (username: string) => void
     savedUsername: string
     needsPin: boolean
-    onPinSubmit: (pin: string) => Promise<boolean>
+    onPinSubmit: (pin: string) => Promise<boolean | string>
 }
 
 export function UsernameEntry({ onSubmit, savedUsername, needsPin, onPinSubmit }: Props) {
@@ -26,10 +26,10 @@ export function UsernameEntry({ onSubmit, savedUsername, needsPin, onPinSubmit }
             }
             setIsVerifying(true)
             setPinError('')
-            const valid = await onPinSubmit(pin.trim())
+            const result = await onPinSubmit(pin.trim())
             setIsVerifying(false)
-            if (!valid) {
-                setPinError('Wrong PIN')
+            if (result !== true) {
+                setPinError(typeof result === 'string' ? result : 'Wrong PIN')
                 return
             }
         }

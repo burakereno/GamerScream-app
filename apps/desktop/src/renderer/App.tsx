@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.9.2'
+const APP_VERSION = '1.9.3'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -161,7 +161,7 @@ export default function App() {
         })()
     }, [])
 
-    const handlePinSubmit = async (pin: string): Promise<boolean> => {
+    const handlePinSubmit = async (pin: string): Promise<boolean | string> => {
         try {
             const res = await fetch(`${SERVER_URL}/api/verify-app-pin`, {
                 method: 'POST',
@@ -177,8 +177,9 @@ export default function App() {
                 return true
             }
             return false
-        } catch {
-            return false
+        } catch (err) {
+            console.error('[PIN] Server unreachable:', err)
+            return 'Server unreachable — check your connection'
         }
     }
 

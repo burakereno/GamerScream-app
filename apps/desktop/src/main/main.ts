@@ -3,6 +3,12 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs'
 import { autoUpdater } from 'electron-updater'
 
+// Suppress harmless EIO pipe errors in dev mode (broken stdout after restart)
+process.on('uncaughtException', (err) => {
+    if ((err as NodeJS.ErrnoException).code === 'EIO') return
+    console.error('Uncaught:', err)
+})
+
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 let currentPttKey: string | null = null
