@@ -98,7 +98,7 @@ function createWindow(): void {
         minWidth: 480,
         minHeight: 600,
         backgroundColor: '#09090b',
-        titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+        titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
         trafficLightPosition: { x: 16, y: 12 },
         autoHideMenuBar: true,
         icon: join(__dirname, '../../build/macos.png'),

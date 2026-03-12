@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '1.9.1'
+const APP_VERSION = '1.9.2'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -435,9 +435,14 @@ export default function App() {
         }
     }, [rnnoiseActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Show loading while checking access token
+    // Show loading spinner while checking access token
     if (checkingAccess) {
-        return null
+        return (
+            <div className="loading-screen">
+                <img src={logoSvg} alt="GamerScream" className="loading-logo" />
+                <div className="loading-spinner" />
+            </div>
+        )
     }
 
     if (!hasEnteredName || !accessVerified) {
@@ -454,7 +459,8 @@ export default function App() {
 
     return (
         <div className="app">
-            <div className="sticky-header">
+            {/* Fixed header bar — never scrolls, contains drag region */}
+            <div className="app-header-bar">
 
                 {/* Auto-update banner */}
                 {updateVersion && (
@@ -497,7 +503,9 @@ export default function App() {
                 </div>
             </div>
 
-            <ToastContainer toasts={toasts} />
+            {/* Scrollable content area */}
+            <div className="app-content">
+                <ToastContainer toasts={toasts} />
 
             {activeTab === 'channels' && (
                 <>
@@ -691,6 +699,7 @@ export default function App() {
                     {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
                 </div>
             )}
+            </div>
         </div>
     )
 }
