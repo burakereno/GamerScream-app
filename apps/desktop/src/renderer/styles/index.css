@@ -909,6 +909,38 @@ input[type="range"]:active::-webkit-slider-thumb {
   gap: 8px;
 }
 
+/* User avatar - colored initial circle */
+.player-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+}
+
+/* Mic level visualizer bar */
+.mic-level-bar {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.mic-level-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), #66bb6a);
+  border-radius: 3px;
+  transition: width 0.06s linear;
+}
+
 .player-dot {
   width: 8px;
   height: 8px;

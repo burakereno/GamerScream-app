@@ -27,6 +27,16 @@ interface Props {
     onClearError?: () => void
 }
 
+// Hash username to stable HSL color
+function nameToColor(name: string): string {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const h = ((hash % 360) + 360) % 360
+    return `hsl(${h}, 65%, 45%)`
+}
+
 // [P3-#14] Extracted reusable PlayerList component
 function PlayerList({
     players,
@@ -81,6 +91,12 @@ function PlayerList({
             {players.map((player) => (
                 <div key={player.identity} className="player-row">
                     <div className="player-info">
+                        <div
+                            className="player-avatar"
+                            style={{ background: nameToColor(player.displayName) }}
+                        >
+                            {player.displayName.charAt(0)}
+                        </div>
                         <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
                             <span /><span /><span /><span />
                         </div>
