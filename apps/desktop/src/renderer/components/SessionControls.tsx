@@ -262,7 +262,7 @@ export function SessionControls({
                     setHoverPlayers(prev => ({ ...prev, [roomNameToFetch]: data.players }))
                 }
             } catch { /* ignore */ }
-        }, 300)
+        }, 50)
     }, [])
 
     const handleChannelLeave = useCallback(() => {
