@@ -334,13 +334,6 @@ export function SessionControls({
                                         {ch.playerCount}
                                     </span>
                                 )}
-                                {ch.playerNames && ch.playerNames.length > 0 && (
-                                    <div className="channel-players-tooltip">
-                                        {ch.playerNames.map((name, i) => (
-                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
-                                        ))}
-                                    </div>
-                                )}
                             </button>
 
                             {isCurrent && players.length > 0 && (
@@ -385,13 +378,6 @@ export function SessionControls({
                                         <span className="channel-badge">{ch.playerCount}</span>
                                     )}
                                 </span>
-                                {ch.playerNames && ch.playerNames.length > 0 && (
-                                    <div className="channel-players-tooltip">
-                                        {ch.playerNames.map((name, i) => (
-                                            <div key={i} className="channel-players-tooltip-item">🎮 {name}</div>
-                                        ))}
-                                    </div>
-                                )}
                             </button>
 
                             {isCurrent && players.length > 0 && (

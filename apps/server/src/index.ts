@@ -375,7 +375,6 @@ async function buildRoomList() {
         name: string
         roomName?: string
         playerCount: number
-        playerNames?: string[]
         hasPin?: boolean
         isCustom?: boolean
         createdBy?: string
@@ -391,19 +390,10 @@ async function buildRoomList() {
     for (const ch of defaultChannels) {
         const roomName = `ch-${ch}`
         const lkRoom = livekitRooms.find((r: any) => r.name === roomName)
-        const count = lkRoom ? lkRoom.numParticipants : 0
-        let playerNames: string[] = []
-        if (count > 0 && lkRoom) {
-            try {
-                const participants = await roomService.listParticipants(roomName)
-                playerNames = participants.map((p: any) => p.name || p.identity)
-            } catch { /* ignore */ }
-        }
         rooms.push({
             channel: ch,
             name: roomName,
-            playerCount: count,
-            playerNames
+            playerCount: lkRoom ? lkRoom.numParticipants : 0
         })
     }
 
@@ -417,19 +407,10 @@ async function buildRoomList() {
             continue
         }
 
-        let playerNames: string[] = []
-        if (count > 0 && lkRoom) {
-            try {
-                const participants = await roomService.listParticipants(roomName)
-                playerNames = participants.map((p: any) => p.name || p.identity)
-            } catch { /* ignore */ }
-        }
-
         rooms.push({
             name: custom.name,
             roomName,
             playerCount: count,
-            playerNames,
             hasPin: !!custom.pin,
             isCustom: true,
             createdBy: custom.createdBy

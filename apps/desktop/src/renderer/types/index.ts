@@ -47,7 +47,6 @@ export interface ChannelInfo {
     name: string
     roomName?: string // actual LiveKit room name for custom channels
     playerCount: number
-    playerNames?: string[]
     hasPin?: boolean
     isCustom?: boolean
     createdBy?: string
