@@ -492,7 +492,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
                             // Compensate for RNNoise volume reduction
                             const compensationGain = ctx.createGain()
-                            compensationGain.gain.value = 1.5
+                            compensationGain.gain.value = 2.5
 
                             // Wet path (noise-suppressed)
                             const wetGain = ctx.createGain()
