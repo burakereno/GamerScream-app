@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X } from 'lucide-react'
+import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X, Radio } from 'lucide-react'
 import Avatar from 'boring-avatars'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
 
@@ -13,7 +13,6 @@ interface Props {
     isVadGateOpen: boolean
     allMuted: boolean
     channel: number
-    autoConnect: boolean
     players: ConnectedPlayer[]
     channels: ChannelInfo[]
     roomName: string
@@ -24,7 +23,7 @@ interface Props {
     inputMode: 'voice' | 'ptt' | 'vad'
     onToggleMuteAll: () => void
     onChannelChange: (channel: number) => void
-    onAutoConnectChange: (autoConnect: boolean) => void
+
     onPlayerVolumeChange: (identity: string, volume: number) => void
     onCreateChannel: (name: string, pin: string, createdBy: string) => Promise<any>
     onVerifyPin: (roomName: string, pin: string) => Promise<boolean>
@@ -137,7 +136,6 @@ export function SessionControls({
     isVadGateOpen,
     allMuted,
     channel,
-    autoConnect,
     players,
     channels,
     roomName,
@@ -148,7 +146,8 @@ export function SessionControls({
     onToggleMuteAll,
     inputMode,
     onChannelChange,
-    onAutoConnectChange,
+    // onAutoConnectChange removed
+
     onPlayerVolumeChange,
     onCreateChannel,
     onVerifyPin,
@@ -280,7 +279,7 @@ export function SessionControls({
 
     return (
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <h2 className="card-title" onClick={handleTitleClick} style={{ userSelect: 'none' }}><Plug size={14} /> Session</h2>
+            <h2 className="card-title" onClick={handleTitleClick} style={{ userSelect: 'none' }}><Radio size={14} /> Session</h2>
 
             <div className="controls-row">
                 <button
@@ -330,19 +329,7 @@ export function SessionControls({
                     </div>
                 )}
 
-                <div className="controls-spacer" />
 
-                <label className="auto-connect-label">
-                    <div className="toggle">
-                        <input
-                            type="checkbox"
-                            checked={autoConnect}
-                            onChange={(e) => onAutoConnectChange(e.target.checked)}
-                        />
-                        <span className="toggle-track" />
-                    </div>
-                    Auto-connect
-                </label>
             </div>
 
             {/* Channel list */}

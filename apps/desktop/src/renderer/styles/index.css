@@ -663,17 +663,29 @@ input[type="range"]:active::-webkit-slider-thumb {
    SESSION CONTROLS
    ============================================ */
 .controls-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.controls-row > button,
+.controls-row > .mute-btn-wrapper {
+  box-sizing: border-box;
+}
+
+.controls-row > button {
+  width: 100%;
 }
 
 /* Mute button tooltip */
 .mute-btn-wrapper {
   position: relative;
-  display: inline-flex;
+  display: flex;
+}
+
+.mute-btn-wrapper > .btn {
+  width: 100%;
 }
 
 .mute-btn-wrapper.has-tooltip::after {
@@ -699,18 +711,9 @@ input[type="range"]:active::-webkit-slider-thumb {
   opacity: 1;
 }
 
-.controls-spacer {
-  flex: 1;
-}
 
-.auto-connect-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--text-muted);
-}
+
+
 
 .toggle {
   position: relative;

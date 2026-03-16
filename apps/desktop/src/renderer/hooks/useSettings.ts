@@ -9,7 +9,6 @@ const defaultSettings: AppSettings = {
     speakerId: '',
     micLevel: 100,
     channel: 1,
-    autoConnect: false,
     noiseSuppression: 100,
     inputMode: 'voice',
     pttKey: 'CapsLock',

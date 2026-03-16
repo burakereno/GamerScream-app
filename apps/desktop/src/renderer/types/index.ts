@@ -58,7 +58,6 @@ export interface AppSettings {
     speakerId: string
     micLevel: number
     channel: number
-    autoConnect: boolean
     noiseSuppression: number // 0-100, noise suppression strength (wet/dry mix)
     inputMode: 'voice' | 'ptt' | 'vad' // Voice (always on) / Push-to-Talk / Voice Activity Detection
     pttKey: string // Electron accelerator key for PTT (e.g. 'CapsLock')

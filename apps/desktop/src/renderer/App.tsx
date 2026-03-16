@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '2.1.1'
+const APP_VERSION = '2.1.2'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -101,7 +101,7 @@ export default function App() {
     }, [settings.username])
 
     const [connectError, setConnectError] = useState<string | null>(null)
-    const autoConnectDone = useRef(false)
+
     const [recordingKeybind, setRecordingKeybind] = useState(false)
     const pttActiveRef = useRef(false) // Track PTT key state to prevent repeated fires
     const [activeTab, setActiveTab] = useState<'channels' | 'settings'>('channels')
@@ -204,15 +204,7 @@ export default function App() {
         }
     }, [settings.speakerId])
 
-    // [P2-#12] Auto-connect on launch — requires accessVerified
-    useEffect(() => {
-        if (accessVerified && hasEnteredName && settings.autoConnect && !isConnected && !isConnecting && !isReconnecting && !autoConnectDone.current) {
-            autoConnectDone.current = true
-            connect(settings.username, settings.channel, selectedMic, micLevel, undefined, undefined, settings.noiseSuppression, settings.joinSoundId).catch((err) => {
-                setConnectError(err instanceof Error ? err.message : 'Auto-connect failed')
-            })
-        }
-    }, [accessVerified, hasEnteredName, settings.autoConnect]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
     // Mode transition: handle mute/unmute and gate state on connect or mode switch
     useEffect(() => {
@@ -518,7 +510,7 @@ export default function App() {
                         isVadGateOpen={isVadGateOpen}
                         allMuted={allMuted}
                         channel={settings.channel}
-                        autoConnect={settings.autoConnect}
+
                         players={players}
                         channels={channels}
                         roomName={roomName}
@@ -533,7 +525,7 @@ export default function App() {
                         inputMode={settings.inputMode}
                         onToggleMuteAll={toggleMuteAll}
                         onChannelChange={(ch) => updateSetting('channel', ch)}
-                        onAutoConnectChange={(ac) => updateSetting('autoConnect', ac)}
+
                         onPlayerVolumeChange={setPlayerVolume}
                         onCreateChannel={createChannel}
                         onVerifyPin={verifyPin}

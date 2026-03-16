@@ -13,17 +13,18 @@ vi.mock('lucide-react', () => ({
     Hash: () => <span data-testid="icon-hash" />,
     Lock: () => <span data-testid="icon-lock" />,
     Plus: () => <span data-testid="icon-plus" />,
-    X: () => <span data-testid="icon-x" />
+    X: () => <span data-testid="icon-x" />,
+    Radio: () => <span data-testid="icon-radio" />
 }))
 
 const defaultProps = {
     isConnected: false,
     isConnecting: false,
+    isReconnecting: false,
     isMuted: false,
     isVadGateOpen: true,
     allMuted: false,
     channel: 1,
-    autoConnect: false,
     players: [],
     channels: [
         { channel: 1, name: 'ch-1', playerCount: 0 },
@@ -40,7 +41,6 @@ const defaultProps = {
     inputMode: 'voice' as const,
     onToggleMuteAll: vi.fn(),
     onChannelChange: vi.fn(),
-    onAutoConnectChange: vi.fn(),
     onPlayerVolumeChange: vi.fn(),
     onCreateChannel: vi.fn(),
     onVerifyPin: vi.fn(),
