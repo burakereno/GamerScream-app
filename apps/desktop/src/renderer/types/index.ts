@@ -61,6 +61,8 @@ export interface AppSettings {
     noiseSuppression: number // 0-100, noise suppression strength (wet/dry mix)
     inputMode: 'voice' | 'ptt' | 'vad' // Voice (always on) / Push-to-Talk / Voice Activity Detection
     pttKey: string // Electron accelerator key for PTT (e.g. 'CapsLock')
+    muteToggleEnabled: boolean // Whether global mute toggle key is active (voice mode only)
+    muteToggleKey: string // e.code value for mute toggle (e.g. 'KeyM')
     vadThreshold: number // 0-100, sensitivity for VAD noise gate
     joinSoundId: string // Selected join sound ID (default: 'hero')
 }

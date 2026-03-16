@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '2.1.2'
+const APP_VERSION = '2.2.0'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -103,6 +103,7 @@ export default function App() {
     const [connectError, setConnectError] = useState<string | null>(null)
 
     const [recordingKeybind, setRecordingKeybind] = useState(false)
+    const [recordingMuteKeybind, setRecordingMuteKeybind] = useState(false)
     const pttActiveRef = useRef(false) // Track PTT key state to prevent repeated fires
     const [activeTab, setActiveTab] = useState<'channels' | 'settings'>('channels')
 
@@ -365,6 +366,67 @@ export default function App() {
         }
     }, [settings.inputMode, settings.pttKey]) // refs avoid re-registration
 
+    // Mute Toggle Key: Global toggle mute for voice mode
+    // Reuses PTT IPC infrastructure (registerPttKey/onPttKeyDown) — no main process changes needed.
+    // Only active when inputMode === 'voice' AND muteToggleEnabled === true.
+    const toggleMuteRef = useRef(toggleMute)
+    toggleMuteRef.current = toggleMute
+
+    useEffect(() => {
+        if (settings.inputMode !== 'voice' || !settings.muteToggleEnabled) {
+            return
+        }
+
+        const accelerator = codeToAccelerator(settings.muteToggleKey)
+        let lastToggleTime = 0 // Debounce guard for background key events
+
+        const handleToggle = () => {
+            if (!isConnectedRef.current) return
+            // Debounce: ignore if toggled within last 300ms (prevents rapid fire from key repeat)
+            const now = Date.now()
+            if (now - lastToggleTime < 300) return
+            lastToggleTime = now
+            toggleMuteRef.current()
+        }
+
+        // Renderer key events (focused)
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === settings.muteToggleKey && !e.repeat) {
+                handleToggle()
+            }
+        }
+
+        // Main process IPC (background) — only key-down needed for toggle
+        window.electronAPI?.onPttKeyDown?.(handleToggle)
+
+        const onFocus = () => {
+            window.electronAPI?.unregisterPttKey?.()
+            window.addEventListener('keydown', handleKeyDown)
+        }
+
+        const onBlur = () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.electronAPI?.registerPttKey?.(accelerator)
+        }
+
+        if (document.hasFocus()) {
+            window.addEventListener('keydown', handleKeyDown)
+        } else {
+            window.electronAPI?.registerPttKey?.(accelerator)
+        }
+
+        window.addEventListener('focus', onFocus)
+        window.addEventListener('blur', onBlur)
+
+        return () => {
+            window.electronAPI?.offPttEvents?.()
+            window.electronAPI?.unregisterPttKey?.()
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('focus', onFocus)
+            window.removeEventListener('blur', onBlur)
+        }
+    }, [settings.inputMode, settings.muteToggleEnabled, settings.muteToggleKey])
+
     // PTT: Keybind registration failure
     useEffect(() => {
         window.electronAPI?.onPttRegisterFailed?.((key) => {
@@ -523,6 +585,7 @@ export default function App() {
                             toggleMute()
                         }}
                         inputMode={settings.inputMode}
+                        muteToggleKey={settings.inputMode === 'voice' && settings.muteToggleEnabled ? settings.muteToggleKey : undefined}
                         onToggleMuteAll={toggleMuteAll}
                         onChannelChange={(ch) => updateSetting('channel', ch)}
 
@@ -606,6 +669,41 @@ export default function App() {
                                 </button>
                             </div>
                         </div>
+                        {settings.inputMode === 'voice' && (
+                            <>
+                                <div className="settings-row">
+                                    <span className="settings-label">Mute Toggle Key</span>
+                                    <label className="toggle">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.muteToggleEnabled}
+                                            onChange={(e) => updateSetting('muteToggleEnabled', e.target.checked)}
+                                        />
+                                        <span className="toggle-track" />
+                                    </label>
+                                </div>
+                                {settings.muteToggleEnabled && (
+                                    <div className="settings-row">
+                                        <span className="settings-label">Keybind</span>
+                                        <button
+                                            className={`ptt-keybind-btn ${recordingMuteKeybind ? 'recording' : ''}`}
+                                            onClick={() => setRecordingMuteKeybind(true)}
+                                            onKeyDown={(e) => {
+                                                if (recordingMuteKeybind) {
+                                                    e.preventDefault()
+                                                    e.stopPropagation()
+                                                    updateSetting('muteToggleKey', e.code)
+                                                    setRecordingMuteKeybind(false)
+                                                }
+                                            }}
+                                            onBlur={() => setRecordingMuteKeybind(false)}
+                                        >
+                                            {recordingMuteKeybind ? 'Press any key...' : formatKeyName(settings.muteToggleKey)}
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        )}
                         {settings.inputMode === 'ptt' && (
                             <div className="settings-row">
                                 <span className="settings-label">Keybind</span>
@@ -647,7 +745,9 @@ export default function App() {
                         )}
                         <span className="settings-hint">
                             {settings.inputMode === 'voice'
-                                ? 'Always transmitting when connected'
+                                ? (settings.muteToggleEnabled
+                                    ? `Press ${formatKeyName(settings.muteToggleKey)} to toggle mute — works in background`
+                                    : 'Always transmitting when connected')
                                 : settings.inputMode === 'vad'
                                     ? 'Auto-mutes when you stop talking — noise gate'
                                     : `Hold ${formatKeyName(settings.pttKey)} to talk — works in background`}

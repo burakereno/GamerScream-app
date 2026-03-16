@@ -12,6 +12,8 @@ const defaultSettings: AppSettings = {
     noiseSuppression: 100,
     inputMode: 'voice',
     pttKey: 'CapsLock',
+    muteToggleEnabled: false,
+    muteToggleKey: 'KeyM',
     vadThreshold: 10,
     joinSoundId: 'hero'
 }

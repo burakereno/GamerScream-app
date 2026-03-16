@@ -21,6 +21,7 @@ interface Props {
     onDisconnect: () => void
     onToggleMute: () => void
     inputMode: 'voice' | 'ptt' | 'vad'
+    muteToggleKey?: string
     onToggleMuteAll: () => void
     onChannelChange: (channel: number) => void
 
@@ -32,6 +33,19 @@ interface Props {
 
 // Avatar color palette matching app theme
 const AVATAR_COLORS = ['#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#22c55e']
+
+// Human-readable short key name for mute badge
+function formatMuteKey(code: string): string {
+    if (code.startsWith('Key')) return code.slice(3)
+    if (code.startsWith('Digit')) return code.slice(5)
+    const map: Record<string, string> = {
+        CapsLock: 'CAPS', Tab: 'TAB', Space: 'SPC',
+        ShiftLeft: 'L⇧', ShiftRight: 'R⇧',
+        ControlLeft: 'L⌃', ControlRight: 'R⌃',
+        Backquote: '~', Backslash: '\\',
+    }
+    return map[code] || code
+}
 
 // [P3-#14] Extracted reusable PlayerList component
 function PlayerList({
@@ -145,6 +159,7 @@ export function SessionControls({
     onToggleMute,
     onToggleMuteAll,
     inputMode,
+    muteToggleKey,
     onChannelChange,
     // onAutoConnectChange removed
 
@@ -325,6 +340,9 @@ export function SessionControls({
                             style={!isConnected || inputMode !== 'voice' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
                         >
                             {isMuted ? <><MicOff size={14} /> Unmute</> : <><Mic size={14} /> Mute</>}
+                            {muteToggleKey && inputMode === 'voice' && (
+                                <span className="mute-key-badge">{formatMuteKey(muteToggleKey)}</span>
+                            )}
                         </button>
                     </div>
                 )}
