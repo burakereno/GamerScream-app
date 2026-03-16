@@ -77,6 +77,8 @@ function getVolumeKey(participant: RemoteParticipant): string {
 export interface LiveKitCallbacks {
     onParticipantJoin?: (name: string) => void
     onParticipantLeave?: (name: string) => void
+    onParticipantMute?: (name: string) => void
+    onParticipantUnmute?: (name: string) => void
     onAuthExpired?: () => void
 }
 
@@ -383,8 +385,19 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                     fetchChannels()
                     callbacksRef.current?.onParticipantLeave?.(p.name || p.identity)
                 })
-                room.on(RoomEvent.TrackMuted, () => updatePlayerList(room))
-                room.on(RoomEvent.TrackUnmuted, () => updatePlayerList(room))
+                room.on(RoomEvent.TrackMuted, (publication, participant) => {
+                    updatePlayerList(room)
+                    // Notify only for remote participants' audio tracks
+                    if (participant !== room.localParticipant && publication.kind === Track.Kind.Audio) {
+                        callbacksRef.current?.onParticipantMute?.(participant.name || participant.identity)
+                    }
+                })
+                room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
+                    updatePlayerList(room)
+                    if (participant !== room.localParticipant && publication.kind === Track.Kind.Audio) {
+                        callbacksRef.current?.onParticipantUnmute?.(participant.name || participant.identity)
+                    }
+                })
                 room.on(RoomEvent.ActiveSpeakersChanged, () => updatePlayerList(room))
                 room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
                     // [P2-7] Remove existing audio element before appending new one

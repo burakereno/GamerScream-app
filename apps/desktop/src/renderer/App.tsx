@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '2.2.0'
+const APP_VERSION = '2.2.1'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -68,6 +68,24 @@ export default function App() {
     const [checkingAccess, setCheckingAccess] = useState(true)
     const [showAdmin, setShowAdmin] = useState(false)
 
+    // Synth beep for mute toggle feedback (Web Audio API — no file dependency)
+    // Defined before useLiveKit because it's used in onParticipantMute/onParticipantUnmute callbacks
+    const playMuteBeep = useCallback((muting: boolean) => {
+        try {
+            const ctx = new AudioContext()
+            const osc = ctx.createOscillator()
+            const gain = ctx.createGain()
+            osc.connect(gain)
+            gain.connect(ctx.destination)
+            osc.frequency.value = muting ? 300 : 600 // Low = mute, High = unmute
+            gain.gain.value = 0.08
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+            osc.start()
+            osc.stop(ctx.currentTime + 0.15)
+            osc.onended = () => ctx.close()
+        } catch { /* ignore audio context failures */ }
+    }, [])
+
     const {
         isConnected, isConnecting, isReconnecting, isMuted, isVadGateOpen, allMuted, players, roomName, channels,
         rnnoiseActive, connect, disconnect, cancelReconnect, toggleMute, setMuted, toggleMuteAll, setPlayerVolume,
@@ -85,6 +103,16 @@ export default function App() {
             addToast(`${name} left`, 'leave')
             window.electronAPI?.showNotification?.('GamerScream', `${name} left the channel`)
         },
+        onParticipantMute: (name) => {
+            playMuteBeep(true)
+            addToast(`${name} muted`, 'leave')
+            window.electronAPI?.showNotification?.('GamerScream', `🔇 ${name} muted`)
+        },
+        onParticipantUnmute: (name) => {
+            playMuteBeep(false)
+            addToast(`${name} unmuted`, 'join')
+            window.electronAPI?.showNotification?.('GamerScream', `🎤 ${name} unmuted`)
+        },
         // [P2-1] Token expired — clear and show PIN screen
         onAuthExpired: () => {
             window.electronAPI?.removeStoredToken?.()
@@ -92,6 +120,10 @@ export default function App() {
             setAccessVerified(false)
         }
     }, accessVerified)  // ← Gate polling on accessVerified
+
+    // Ref to track mute state for the global key handler (which can't read React state)
+    const isMutedRef = useRef(isMuted)
+    isMutedRef.current = isMuted
 
     const [hasEnteredName, setHasEnteredName] = useState(!!settings.username)
 
@@ -366,11 +398,19 @@ export default function App() {
         }
     }, [settings.inputMode, settings.pttKey]) // refs avoid re-registration
 
+    // Wrapper: toggleMute + beep + notification
+    const handleMuteToggle = useCallback(() => {
+        const willMute = !isMutedRef.current
+        toggleMute()
+        playMuteBeep(willMute)
+        window.electronAPI?.showNotification?.('GamerScream', willMute ? `🔇 ${settings.username} muted` : `🎤 ${settings.username} unmuted`)
+    }, [toggleMute, playMuteBeep])
+
     // Mute Toggle Key: Global toggle mute for voice mode
     // Reuses PTT IPC infrastructure (registerPttKey/onPttKeyDown) — no main process changes needed.
     // Only active when inputMode === 'voice' AND muteToggleEnabled === true.
-    const toggleMuteRef = useRef(toggleMute)
-    toggleMuteRef.current = toggleMute
+    const toggleMuteRef = useRef(handleMuteToggle)
+    toggleMuteRef.current = handleMuteToggle
 
     useEffect(() => {
         if (settings.inputMode !== 'voice' || !settings.muteToggleEnabled) {
@@ -582,7 +622,7 @@ export default function App() {
                         onToggleMute={() => {
                             // In PTT/VAD mode, manual mute toggle is disabled
                             if (settings.inputMode !== 'voice') return
-                            toggleMute()
+                            handleMuteToggle()
                         }}
                         inputMode={settings.inputMode}
                         muteToggleKey={settings.inputMode === 'voice' && settings.muteToggleEnabled ? settings.muteToggleKey : undefined}
