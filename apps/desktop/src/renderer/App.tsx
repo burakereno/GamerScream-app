@@ -155,10 +155,10 @@ export default function App() {
         const api = window.electronAPI
         if (!api?.onUpdateAvailable) return
         api.onUpdateAvailable((info: { version: string }) => {
-            setUpdateVersion(info.version)
+            setUpdateVersion(info.version.replace(/\.0$/, ''))
         })
         api.onUpdateDownloaded((info: { version: string }) => {
-            setUpdateVersion(info.version)
+            setUpdateVersion(info.version.replace(/\.0$/, ''))
             setUpdateReady(true)
         })
     }, [])
