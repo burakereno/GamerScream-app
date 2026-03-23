@@ -69,6 +69,17 @@ function getParticipantDeviceId(participant: RemoteParticipant | { metadata?: st
     return ''
 }
 
+// Read inputMode from participant metadata (set at connect time, updated on mode switch)
+function getParticipantInputMode(participant: RemoteParticipant | { metadata?: string | null }): string {
+    try {
+        if (participant.metadata) {
+            const meta = JSON.parse(participant.metadata)
+            return meta.inputMode || 'voice'
+        }
+    } catch { /* ignore */ }
+    return 'voice'
+}
+
 // Volume key: prefer device ID, fallback to identity
 function getVolumeKey(participant: RemoteParticipant): string {
     return getParticipantDeviceId(participant) || participant.identity
@@ -92,7 +103,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     const lastConnectParamsRef = useRef<{
         username: string; channel: number; micDeviceId: string;
         micLevel: number; customRoomName?: string; pin?: string;
-        noiseSuppression: number; joinSoundId: string
+        noiseSuppression: number; joinSoundId: string; inputMode: string
     } | null>(null)
     const [isMuted, setIsMuted] = useState(false)
     const [players, setPlayers] = useState<ConnectedPlayer[]>([])
@@ -311,14 +322,14 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
     }, [allMuted, updatePlayerList])
 
     const connect = useCallback(
-        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100, joinSoundId: string = '') => {
+        async (username: string, channel: number, micDeviceId: string, micLevel: number, customRoomName?: string, pin?: string, noiseSuppression: number = 100, joinSoundId: string = '', inputMode: string = 'voice') => {
             // Fix #4: Race condition guard — prevent concurrent connect calls
             if (connectingRef.current) return
             connectingRef.current = true
             intentionalDisconnectRef.current = false
 
             // Save params for auto-reconnect
-            lastConnectParamsRef.current = { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId }
+            lastConnectParamsRef.current = { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId, inputMode }
 
             // Fix #2: Full cleanup of previous session (AudioContext, mic stream, RNNoise)
             if (roomRef.current) {
@@ -351,7 +362,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                 const res = await fetch(`${SERVER_URL}/api/token`, {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ username, room: channelName, deviceId, pin })
+                    body: JSON.stringify({ username, room: channelName, deviceId, pin, inputMode })
                 })
 
                 if (!res.ok) {
@@ -387,15 +398,21 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
                 })
                 room.on(RoomEvent.TrackMuted, (publication, participant) => {
                     updatePlayerList(room)
-                    // Notify only for remote participants' audio tracks
+                    // Notify only for remote participants' audio tracks — skip PTT users (they mute/unmute rapidly)
                     if (participant !== room.localParticipant && publication.kind === Track.Kind.Audio) {
-                        callbacksRef.current?.onParticipantMute?.(participant.name || participant.identity)
+                        const mode = getParticipantInputMode(participant)
+                        if (mode !== 'ptt') {
+                            callbacksRef.current?.onParticipantMute?.(participant.name || participant.identity)
+                        }
                     }
                 })
                 room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
                     updatePlayerList(room)
                     if (participant !== room.localParticipant && publication.kind === Track.Kind.Audio) {
-                        callbacksRef.current?.onParticipantUnmute?.(participant.name || participant.identity)
+                        const mode = getParticipantInputMode(participant)
+                        if (mode !== 'ptt') {
+                            callbacksRef.current?.onParticipantUnmute?.(participant.name || participant.identity)
+                        }
                     }
                 })
                 room.on(RoomEvent.ActiveSpeakersChanged, () => updatePlayerList(room))
@@ -597,8 +614,8 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
         reconnectTimerRef.current = setTimeout(async () => {
             try {
-                const { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId } = params
-                await connect(username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, '')
+                const { username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, joinSoundId, inputMode } = params
+                await connect(username, channel, micDeviceId, micLevel, customRoomName, pin, noiseSuppression, '', inputMode)
                 setIsReconnecting(false)
                 console.log('[Reconnect] Success!')
             } catch {
@@ -749,6 +766,17 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         vadActiveRef.current = active
     }, [])
 
+    // Update inputMode in participant metadata (called when user switches mode while connected)
+    const updateInputModeMetadata = useCallback(async (inputMode: string) => {
+        if (!roomRef.current) return
+        try {
+            const existingMeta = roomRef.current.localParticipant.metadata
+            const meta = existingMeta ? JSON.parse(existingMeta) : {}
+            meta.inputMode = inputMode
+            await roomRef.current.localParticipant.setMetadata(JSON.stringify(meta))
+        } catch { /* ignore — canUpdateOwnMetadata may not be granted on old tokens */ }
+    }, [])
+
     // Switch audio output device for all existing audio elements
     const setSpeakerDevice = useCallback((deviceId: string) => {
         speakerIdRef.current = deviceId
@@ -786,6 +814,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         getRawMicLevel,
         setVadGate,
         setVadActive,
-        setSpeakerDevice
+        setSpeakerDevice,
+        updateInputModeMetadata
     }
 }

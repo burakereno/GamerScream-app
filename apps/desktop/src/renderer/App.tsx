@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '2.2.1'
+const APP_VERSION = '2.3'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -90,7 +90,7 @@ export default function App() {
         isConnected, isConnecting, isReconnecting, isMuted, isVadGateOpen, allMuted, players, roomName, channels,
         rnnoiseActive, connect, disconnect, cancelReconnect, toggleMute, setMuted, toggleMuteAll, setPlayerVolume,
         createChannel, verifyPin, setMicGain, setNoiseSuppressionLevel, getRawMicLevel, setVadGate, setVadActive,
-        setSpeakerDevice
+        setSpeakerDevice, updateInputModeMetadata
     } = useLiveKit({
         onParticipantJoin: (name) => {
             playJoinSound()
@@ -260,6 +260,13 @@ export default function App() {
             setVadGate(true)
         }
     }, [isConnected, settings.inputMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Update participant metadata when inputMode changes while connected
+    useEffect(() => {
+        if (isConnected) {
+            updateInputModeMetadata(settings.inputMode)
+        }
+    }, [isConnected, settings.inputMode, updateInputModeMetadata])
 
     // VAD: Voice Activity Detection — poll raw mic level and control gain gate
     useEffect(() => {
@@ -482,11 +489,11 @@ export default function App() {
     const handleConnect = useCallback(async (customRoomName?: string, pin?: string) => {
         setConnectError(null)
         try {
-            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin, settings.noiseSuppression, settings.joinSoundId)
+            await connect(settings.username, settings.channel, selectedMic, micLevel, customRoomName, pin, settings.noiseSuppression, settings.joinSoundId, settings.inputMode)
         } catch (err) {
             setConnectError(err instanceof Error ? err.message : 'Connection failed')
         }
-    }, [connect, settings.username, settings.channel, selectedMic, micLevel, settings.noiseSuppression, settings.joinSoundId])
+    }, [connect, settings.username, settings.channel, selectedMic, micLevel, settings.noiseSuppression, settings.joinSoundId, settings.inputMode])
 
     const handleMicSelect = (deviceId: string) => {
         setSelectedMic(deviceId)

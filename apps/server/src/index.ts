@@ -234,7 +234,7 @@ app.get('/api/health', (_req, res) => {
 // Generate LiveKit token
 app.post('/api/token', requireAccess, async (req, res) => {
     try {
-        const { username, room, deviceId, pin } = req.body
+        const { username, room, deviceId, pin, inputMode } = req.body
 
         if (!username || !room) {
             res.status(400).json({ error: 'username and room are required' })
@@ -258,7 +258,8 @@ app.post('/api/token', requireAccess, async (req, res) => {
         }
 
         const safeDeviceId = String(deviceId || '').slice(0, 64)
-        const metadata = JSON.stringify({ deviceId: safeDeviceId })
+        const safeInputMode = ['voice', 'ptt', 'vad'].includes(inputMode) ? inputMode : 'voice'
+        const metadata = JSON.stringify({ deviceId: safeDeviceId, inputMode: safeInputMode })
 
         // [P2-#10] Unique identity using deviceId suffix to prevent collisions
         const shortDeviceId = safeDeviceId.slice(0, 6) || crypto.randomBytes(3).toString('hex')
@@ -277,7 +278,8 @@ app.post('/api/token', requireAccess, async (req, res) => {
             roomJoin: true,
             canPublish: true,
             canSubscribe: true,
-            roomCreate: false
+            roomCreate: false,
+            canUpdateOwnMetadata: true
         })
 
         const jwt = await token.toJwt()
