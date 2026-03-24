@@ -9,7 +9,7 @@ import { AccessToken, RoomServiceClient } from 'livekit-server-sdk'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const app = express()
+const app: ReturnType<typeof express> = express()
 const PORT = process.env.PORT || 3002
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'devkey'
@@ -626,7 +626,23 @@ app.post('/api/admin/invalidate-tokens', requireAdmin, (_req, res) => {
     res.json({ success: true, message: 'All tokens invalidated. Users must re-enter PIN.' })
 })
 
-app.listen(PORT, () => {
-    console.log(`🎮 GamerScream Server running on http://localhost:${PORT}`)
-    console.log(`📡 LiveKit URL: ${LIVEKIT_URL}`)
-})
+// Only listen when run directly (not when imported by tests)
+const isDirectRun = process.argv[1]?.endsWith('index.js') || process.argv[1]?.endsWith('index.ts')
+if (isDirectRun) {
+    app.listen(PORT, () => {
+        console.log(`🎮 GamerScream Server running on http://localhost:${PORT}`)
+        console.log(`📡 LiveKit URL: ${LIVEKIT_URL}`)
+    })
+}
+
+// ── Test exports ──
+// Reset mutable state (for test isolation)
+export function resetState() {
+    customChannels.clear()
+    pinAttempts.clear()
+    adminAttempts.clear()
+    APP_PIN = process.env.APP_PIN || '1520'
+    TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'
+}
+
+export { app, generateAccessToken, isValidAccessToken, safeCompare }
