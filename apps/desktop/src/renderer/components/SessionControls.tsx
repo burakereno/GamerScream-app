@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, memo } from 'react'
 import { Plug, Unplug, Mic, MicOff, Volume2, VolumeX, Hash, Lock, Plus, X, Radio } from 'lucide-react'
 import Avatar from 'boring-avatars'
 import type { ConnectedPlayer, ChannelInfo } from '../types'
@@ -33,6 +33,53 @@ interface Props {
 
 // Avatar color palette matching app theme
 const AVATAR_COLORS = ['#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#22c55e']
+
+// Memoized player row — only re-renders when this specific player's data changes
+const PlayerRow = memo(function PlayerRow({ player, onPlayerVolumeChange }: {
+    player: ConnectedPlayer
+    onPlayerVolumeChange: (identity: string, volume: number) => void
+}) {
+    return (
+        <div className="player-row">
+            <div className="player-info">
+                <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
+                    <span /><span /><span /><span />
+                </div>
+                <Avatar
+                    name={player.displayName}
+                    variant="beam"
+                    size={22}
+                    colors={AVATAR_COLORS}
+                />
+                <span className="player-name">
+                    {player.displayName}
+                    {player.isLocal && ' (you)'}
+                </span>
+                {!player.isLocal && player.isMuted && (
+                    <MicOff size={12} style={{ color: 'var(--text-muted)', marginLeft: 4 }} />
+                )}
+            </div>
+            {!player.isLocal && (
+                <div className="player-volume">
+                    <Volume2 size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step={5}
+                        value={player.volume}
+                        onChange={(e) => onPlayerVolumeChange(player.identity, Number(e.target.value))}
+                        className="player-volume-slider"
+                        style={{
+                            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${player.volume}%, var(--bg-primary) ${player.volume}%, var(--bg-primary) 100%)`
+                        }}
+                    />
+                    <span className="player-volume-value">{player.volume}%</span>
+                </div>
+            )}
+        </div>
+    )
+})
 
 // Human-readable short key name for mute badge
 function formatMuteKey(code: string): string {
@@ -99,44 +146,11 @@ function PlayerList({
             )}
 
             {players.map((player) => (
-                <div key={player.identity} className="player-row">
-                    <div className="player-info">
-                        <div className={`soundwave ${player.isSpeaking ? 'active' : player.isMuted ? 'muted' : ''}`}>
-                            <span /><span /><span /><span />
-                        </div>
-                        <Avatar
-                            name={player.displayName}
-                            variant="beam"
-                            size={22}
-                            colors={AVATAR_COLORS}
-                        />
-                        <span className="player-name">
-                            {player.displayName}
-                            {player.isLocal && ' (you)'}
-                        </span>
-                        {!player.isLocal && player.isMuted && (
-                            <MicOff size={12} style={{ color: 'var(--text-muted)', marginLeft: 4 }} />
-                        )}
-                    </div>
-                    {!player.isLocal && (
-                        <div className="player-volume">
-                            <Volume2 size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                step={5}
-                                value={player.volume}
-                                onChange={(e) => onPlayerVolumeChange(player.identity, Number(e.target.value))}
-                                className="player-volume-slider"
-                                style={{
-                                    background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${player.volume}%, var(--bg-primary) ${player.volume}%, var(--bg-primary) 100%)`
-                                }}
-                            />
-                            <span className="player-volume-value">{player.volume}%</span>
-                        </div>
-                    )}
-                </div>
+                <PlayerRow
+                    key={player.identity}
+                    player={player}
+                    onPlayerVolumeChange={onPlayerVolumeChange}
+                />
             ))}
         </div>
     )

@@ -145,9 +145,9 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
 
     const updatePlayerList = useCallback((room: Room) => {
         const localParticipant = room.localParticipant
-        const playerList: ConnectedPlayer[] = []
+        const newPlayers: ConnectedPlayer[] = []
 
-        playerList.push({
+        newPlayers.push({
             identity: localParticipant.identity,
             displayName: localParticipant.name || localParticipant.identity,
             isMuted: !localParticipant.isMicrophoneEnabled,
@@ -159,7 +159,7 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
         room.remoteParticipants.forEach((participant: RemoteParticipant) => {
             const key = getVolumeKey(participant)
             const savedVolume = volumeMapRef.current.get(key) ?? 100
-            playerList.push({
+            newPlayers.push({
                 identity: participant.identity,
                 displayName: participant.name || participant.identity,
                 isMuted: !participant.isMicrophoneEnabled,
@@ -169,7 +169,21 @@ export function useLiveKit(callbacks?: LiveKitCallbacks, enabled: boolean = true
             })
         })
 
-        setPlayers(playerList)
+        // Diff-based update — only set state if something actually changed
+        setPlayers((prev) => {
+            if (prev.length !== newPlayers.length) return newPlayers
+            for (let i = 0; i < newPlayers.length; i++) {
+                const p = prev[i], n = newPlayers[i]
+                if (p.identity !== n.identity ||
+                    p.displayName !== n.displayName ||
+                    p.isMuted !== n.isMuted ||
+                    p.isSpeaking !== n.isSpeaking ||
+                    p.volume !== n.volume) {
+                    return newPlayers
+                }
+            }
+            return prev // No changes — skip re-render
+        })
     }, [])
 
     // Fetch channel info (player counts) from server
