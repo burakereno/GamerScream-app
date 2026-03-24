@@ -443,11 +443,6 @@ body.platform-darwin .app-header-bar {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
-  transition: border-color 0.2s;
-}
-
-.card:hover {
-  border-color: rgba(249, 115, 22, 0.15);
 }
 
 .card-title {
