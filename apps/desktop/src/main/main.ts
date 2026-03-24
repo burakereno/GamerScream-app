@@ -132,6 +132,39 @@ function createWindow(): void {
 }
 
 // ── Auto-Update ──
+// Persist pending update so the banner survives app restarts
+function getPendingUpdatePath(): string {
+    const dir = app.getPath('userData')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    return join(dir, 'pending-update.json')
+}
+
+function savePendingUpdate(version: string): void {
+    try {
+        writeFileSync(getPendingUpdatePath(), JSON.stringify({ version }), 'utf-8')
+    } catch { /* ignore */ }
+}
+
+function clearPendingUpdate(): void {
+    try {
+        const p = getPendingUpdatePath()
+        if (existsSync(p)) unlinkSync(p)
+    } catch { /* ignore */ }
+}
+
+function getPendingUpdate(): string | null {
+    try {
+        const p = getPendingUpdatePath()
+        if (!existsSync(p)) return null
+        const data = JSON.parse(readFileSync(p, 'utf-8'))
+        // Only return if it's newer than current version
+        if (data.version && data.version !== app.getVersion()) return data.version
+        // Same version means user already updated — clean up
+        clearPendingUpdate()
+        return null
+    } catch { return null }
+}
+
 function setupAutoUpdater(): void {
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = true
@@ -141,12 +174,22 @@ function setupAutoUpdater(): void {
     })
 
     autoUpdater.on('update-downloaded', (info) => {
+        savePendingUpdate(info.version)
         safeSend('update-downloaded', { version: info.version })
     })
 
     autoUpdater.on('error', (err) => {
         console.error('Auto-update error:', err.message)
     })
+
+    // Check for pending update from a previous session first
+    const pendingVersion = getPendingUpdate()
+    if (pendingVersion) {
+        // Delay slightly so renderer has time to set up IPC listeners
+        setTimeout(() => {
+            safeSend('update-downloaded', { version: pendingVersion })
+        }, 2000)
+    }
 
     setTimeout(() => {
         autoUpdater.checkForUpdates().catch((err) => {
@@ -181,6 +224,7 @@ app.on('window-all-closed', () => {
 
 // IPC handlers
 ipcMain.handle('install-update', () => {
+    clearPendingUpdate()
     if (process.platform === 'darwin') {
         // macOS: unsigned apps can't auto-update via Squirrel — open release page
         shell.openExternal('https://github.com/burakereno/GamerScream-app/releases/latest')
