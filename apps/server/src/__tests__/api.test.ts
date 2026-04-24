@@ -74,6 +74,23 @@ describe('Server API', () => {
                 .send({ pin: '1520' })
             expect(res.status).toBe(429)
         })
+
+        it('uses forwarded client IP when running behind a proxy', async () => {
+            for (let i = 0; i < 5; i++) {
+                await request(app)
+                    .post('/api/verify-app-pin')
+                    .set('X-Forwarded-For', '203.0.113.10')
+                    .send({ pin: 'wrong' })
+            }
+
+            const otherClient = await request(app)
+                .post('/api/verify-app-pin')
+                .set('X-Forwarded-For', '203.0.113.11')
+                .send({ pin: '1520' })
+
+            expect(otherClient.status).toBe(200)
+            expect(otherClient.body.accessToken).toBeDefined()
+        })
     })
 
     // ── Access Token Verification ──
@@ -93,6 +110,22 @@ describe('Server API', () => {
                 .send({ accessToken: 'invalid-token' })
             expect(res.status).toBe(200)
             expect(res.body.valid).toBe(false)
+        })
+
+        it('does not consume app PIN attempts while checking stored tokens', async () => {
+            for (let i = 0; i < 5; i++) {
+                const res = await request(app)
+                    .post('/api/verify-access-token')
+                    .send({ accessToken: 'invalid-token' })
+                expect(res.status).toBe(200)
+            }
+
+            const pinRes = await request(app)
+                .post('/api/verify-app-pin')
+                .send({ pin: '1520' })
+
+            expect(pinRes.status).toBe(200)
+            expect(pinRes.body.accessToken).toBeDefined()
         })
     })
 

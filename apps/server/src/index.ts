@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app: ReturnType<typeof express> = express()
+app.set('trust proxy', 'loopback, linklocal, uniquelocal')
 const PORT = process.env.PORT || 3002
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'devkey'
@@ -69,20 +70,36 @@ function isValidAccessToken(token: string): boolean {
 
 // [P1-#2] Rate limiting for PIN verification
 const pinAttempts = new Map<string, { count: number; lastAttempt: number }>()
+const tokenVerifyAttempts = new Map<string, { count: number; lastAttempt: number }>()
 const PIN_RATE_LIMIT = 5 // max attempts
 const PIN_RATE_WINDOW = 60 * 1000 // per minute
+const TOKEN_VERIFY_RATE_LIMIT = 60 // stored-token checks are not PIN guesses
+const TOKEN_VERIFY_RATE_WINDOW = 60 * 1000 // per minute
 
-function checkPinRateLimit(ip: string): boolean {
+function checkRateLimit(
+    attempts: Map<string, { count: number; lastAttempt: number }>,
+    ip: string,
+    limit: number,
+    windowMs: number
+): boolean {
     const now = Date.now()
-    const entry = pinAttempts.get(ip)
-    if (!entry || now - entry.lastAttempt > PIN_RATE_WINDOW) {
-        pinAttempts.set(ip, { count: 1, lastAttempt: now })
+    const entry = attempts.get(ip)
+    if (!entry || now - entry.lastAttempt > windowMs) {
+        attempts.set(ip, { count: 1, lastAttempt: now })
         return true
     }
-    if (entry.count >= PIN_RATE_LIMIT) return false
+    if (entry.count >= limit) return false
     entry.count++
     entry.lastAttempt = now
     return true
+}
+
+function checkPinRateLimit(ip: string): boolean {
+    return checkRateLimit(pinAttempts, ip, PIN_RATE_LIMIT, PIN_RATE_WINDOW)
+}
+
+function checkTokenVerifyRateLimit(ip: string): boolean {
+    return checkRateLimit(tokenVerifyAttempts, ip, TOKEN_VERIFY_RATE_LIMIT, TOKEN_VERIFY_RATE_WINDOW)
 }
 
 // [P1-#3] Timing-safe PIN comparison
@@ -140,6 +157,8 @@ app.post('/api/verify-app-pin', (req, res) => {
         return
     }
 
+    pinAttempts.delete(ip)
+
     // [P1-1] Persist admin state on first successful PIN
     saveAdminState()
     res.json({ accessToken: generateAccessToken() })
@@ -149,7 +168,7 @@ app.post('/api/verify-app-pin', (req, res) => {
 // [P1-4] Rate limited to prevent brute-force
 app.post('/api/verify-access-token', (req, res) => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    if (!checkPinRateLimit(ip)) {
+    if (!checkTokenVerifyRateLimit(ip)) {
         res.status(429).json({ error: 'Too many attempts' })
         return
     }
@@ -538,6 +557,9 @@ setInterval(() => {
     for (const [ip, entry] of pinAttempts.entries()) {
         if (now - entry.lastAttempt > PIN_RATE_WINDOW) pinAttempts.delete(ip)
     }
+    for (const [ip, entry] of tokenVerifyAttempts.entries()) {
+        if (now - entry.lastAttempt > TOKEN_VERIFY_RATE_WINDOW) tokenVerifyAttempts.delete(ip)
+    }
 }, 60 * 60 * 1000) // every hour
 
 // ============================================
@@ -640,6 +662,7 @@ if (isDirectRun) {
 export function resetState() {
     customChannels.clear()
     pinAttempts.clear()
+    tokenVerifyAttempts.clear()
     adminAttempts.clear()
     APP_PIN = process.env.APP_PIN || '1520'
     TOKEN_SECRET = process.env.TOKEN_SECRET || LIVEKIT_API_SECRET + '-gamerscream'

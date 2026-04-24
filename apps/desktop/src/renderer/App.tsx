@@ -14,7 +14,7 @@ import logoSvg from './assets/logo.svg'
 
 import { AdminPanel } from './components/AdminPanel'
 
-const APP_VERSION = '2.7.1'
+const APP_VERSION = '2.7.2'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
@@ -201,7 +201,15 @@ export default function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pin })
             })
-            if (!res.ok) return false
+            if (!res.ok) {
+                if (res.status === 403) return false
+                try {
+                    const data = await res.json()
+                    return data.error || 'PIN verification failed'
+                } catch {
+                    return 'PIN verification failed'
+                }
+            }
             const data = await res.json()
             if (data.accessToken) {
                 await window.electronAPI?.setStoredToken?.(data.accessToken)
