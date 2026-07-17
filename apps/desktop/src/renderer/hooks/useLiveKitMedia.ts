@@ -12,6 +12,7 @@ import {
 import { disposeConnectionResources } from './connectionLifecycle'
 import { publishInitialMicrophoneTrack } from './mediaPublishing'
 import type { RefLike } from './liveKitCore'
+import { applyNoiseSuppressionMix } from '../utils/noiseSuppression'
 
 interface CaptureMicrophoneOptions {
     micDeviceId: string
@@ -45,6 +46,7 @@ export function useLiveKitMedia(): LiveKitMediaController {
     const audioContextRef = useRef<AudioContext | null>(null)
     const micStreamRef = useRef<MediaStream | null>(null)
     const rnnoiseNodeRef = useRef<RnnoiseWorkletNode | null>(null)
+    const rnnoiseAvailableRef = useRef(false)
     const wetGainRef = useRef<GainNode | null>(null)
     const dryGainRef = useRef<GainNode | null>(null)
     const speakerIdRef = useRef('')
@@ -58,6 +60,7 @@ export function useLiveKitMedia(): LiveKitMediaController {
             audioContext: audioContextRef.current
         }
         rnnoiseNodeRef.current = null
+        rnnoiseAvailableRef.current = false
         micStreamRef.current = null
         audioContextRef.current = null
         wetGainRef.current = null
@@ -99,14 +102,21 @@ export function useLiveKitMedia(): LiveKitMediaController {
                     const wasmBinary = await loadRnnoise({ url: rnnoiseWasmUrl, simdUrl: rnnoiseSimdWasmUrl })
                     const rnnoiseNode = new RnnoiseWorkletNode(context, { maxChannels: 1, wasmBinary })
                     rnnoiseNodeRef.current = rnnoiseNode
+                    rnnoiseAvailableRef.current = true
                     const compensationGain = context.createGain()
                     compensationGain.gain.value = 2.5
                     const wetGain = context.createGain()
-                    wetGain.gain.value = noiseSuppression / 100
                     wetGainRef.current = wetGain
                     const dryGain = context.createGain()
-                    dryGain.gain.value = 1 - noiseSuppression / 100
                     dryGainRef.current = dryGain
+                    applyNoiseSuppressionMix(wetGain, dryGain, noiseSuppression)
+                    rnnoiseNode.onprocessorerror = () => {
+                        if (rnnoiseNodeRef.current !== rnnoiseNode) return
+                        rnnoiseAvailableRef.current = false
+                        applyNoiseSuppressionMix(wetGain, dryGain, 0, false)
+                        setRnnoiseActive(false)
+                        console.warn('RNNoise processor failed, switched to unfiltered audio')
+                    }
                     const merger = context.createGain()
 
                     source.connect(rnnoiseNode).connect(compensationGain)
@@ -164,8 +174,12 @@ export function useLiveKitMedia(): LiveKitMediaController {
 
     const setNoiseSuppressionLevel = useCallback((level: number) => {
         if (!wetGainRef.current || !dryGainRef.current) return
-        wetGainRef.current.gain.value = level / 100
-        dryGainRef.current.gain.value = 1 - level / 100
+        applyNoiseSuppressionMix(
+            wetGainRef.current,
+            dryGainRef.current,
+            level,
+            rnnoiseAvailableRef.current
+        )
     }, [])
 
     const getRawMicLevel = useCallback((): number => {

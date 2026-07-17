@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFrequencyLevel } from '../utils/audioLevels'
-import { clampNoiseSuppression, withReconnectNoiseSuppression } from '../utils/noiseSuppression'
+import {
+    applyNoiseSuppressionMix,
+    clampNoiseSuppression,
+    withReconnectNoiseSuppression
+} from '../utils/noiseSuppression'
 
 describe('audio processing helpers', () => {
     it('uses the same normalized frequency level for channel activity and Settings', () => {
@@ -24,5 +28,18 @@ describe('audio processing helpers', () => {
         expect(clampNoiseSuppression(-10)).toBe(0)
         expect(clampNoiseSuppression(120)).toBe(100)
         expect(clampNoiseSuppression(Number.NaN)).toBe(100)
+    })
+
+    it('falls back to fully dry audio when the RNNoise processor is unavailable', () => {
+        const wetGain = { gain: { value: 0 } }
+        const dryGain = { gain: { value: 0 } }
+
+        expect(applyNoiseSuppressionMix(wetGain, dryGain, 80)).toBe(80)
+        expect(wetGain.gain.value).toBe(0.8)
+        expect(dryGain.gain.value).toBeCloseTo(0.2)
+
+        expect(applyNoiseSuppressionMix(wetGain, dryGain, 80, false)).toBe(0)
+        expect(wetGain.gain.value).toBe(0)
+        expect(dryGain.gain.value).toBe(1)
     })
 })
