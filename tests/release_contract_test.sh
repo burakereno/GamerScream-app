@@ -90,12 +90,13 @@ require_text "$MAC_RELEASE_SCRIPT" "Developer ID Application: Burak ERENOĞLU (6
 require_text "$MAC_RELEASE_SCRIPT" 'ENTITLEMENTS_PATH="$ROOT_DIR/apps/desktop/build/entitlements.mac.plist"'
 require_text "$MAC_RELEASE_SCRIPT" "codesign --force"
 require_text "$MAC_RELEASE_SCRIPT" '--entitlements "$ENTITLEMENTS_PATH"'
+require_text "$MAC_RELEASE_SCRIPT" "'com\\.apple\\.security\\.device\\.audio-input'"
+require_text "$MAC_RELEASE_SCRIPT" "'com\\.apple\\.security\\.cs\\.disable-library-validation'"
+require_text "$MAC_RELEASE_SCRIPT" "'com\\.apple\\.security\\.get-task-allow'"
 require_text "$MAC_RELEASE_SCRIPT" "codesign --verify --deep --strict"
 require_text "$MAC_RELEASE_SCRIPT" "TeamIdentifier"
 require_text "$MAC_RELEASE_SCRIPT" "flags=.*runtime"
 require_text "$MAC_RELEASE_SCRIPT" "Signed app is missing the required audio-input entitlement"
-require_text "$MAC_RELEASE_SCRIPT" "com.apple.security.cs.disable-library-validation"
-require_text "$MAC_RELEASE_SCRIPT" "com.apple.security.get-task-allow"
 require_text "$MAC_RELEASE_SCRIPT" "notarytool submit"
 require_text "$MAC_RELEASE_SCRIPT" "stapler staple"
 require_text "$MAC_RELEASE_SCRIPT" "stapler validate"

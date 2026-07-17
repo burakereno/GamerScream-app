@@ -86,13 +86,15 @@ printf '%s\n' "$SIGNING_INFO" | grep -Fq "TeamIdentifier=$TEAM_IDENTIFIER"
 printf '%s\n' "$SIGNING_INFO" | grep -Eq 'flags=.*runtime'
 SIGNED_ENTITLEMENTS="$WORK_DIR/signed-entitlements.plist"
 codesign -d --xml --entitlements - "$APP_PATH" > "$SIGNED_ENTITLEMENTS" 2>/dev/null
-[[ "$(plutil -extract com.apple.security.device.audio-input raw -o - "$SIGNED_ENTITLEMENTS")" == "true" ]] || {
+[[ "$(plutil -extract 'com\.apple\.security\.device\.audio-input' raw -o - "$SIGNED_ENTITLEMENTS")" == "true" ]] || {
   echo "Signed app is missing the required audio-input entitlement." >&2
   exit 1
 }
-for forbidden in com.apple.security.cs.disable-library-validation com.apple.security.get-task-allow; do
+for forbidden in \
+  'com\.apple\.security\.cs\.disable-library-validation' \
+  'com\.apple\.security\.get-task-allow'; do
   if plutil -extract "$forbidden" raw -o - "$SIGNED_ENTITLEMENTS" >/dev/null 2>&1; then
-    echo "Signed app contains forbidden entitlement: $forbidden" >&2
+    echo "Signed app contains a forbidden entitlement." >&2
     exit 1
   fi
 done
