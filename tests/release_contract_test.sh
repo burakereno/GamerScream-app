@@ -87,6 +87,9 @@ require_text "$WORKFLOW" "build-windows-release.ps1"
 require_text "$WORKFLOW" "VERSION_BUMP"
 require_text "$WORKFLOW" "type: choice"
 require_text "$MAC_RELEASE_SCRIPT" "Developer ID Application: Burak ERENOĞLU (66K3EFBVB6)"
+require_text "$MAC_RELEASE_SCRIPT" 'ENTITLEMENTS_PATH="$ROOT_DIR/apps/desktop/build/entitlements.mac.plist"'
+require_text "$MAC_RELEASE_SCRIPT" "codesign --force"
+require_text "$MAC_RELEASE_SCRIPT" '--entitlements "$ENTITLEMENTS_PATH"'
 require_text "$MAC_RELEASE_SCRIPT" "codesign --verify --deep --strict"
 require_text "$MAC_RELEASE_SCRIPT" "TeamIdentifier"
 require_text "$MAC_RELEASE_SCRIPT" "flags=.*runtime"

@@ -9,6 +9,7 @@ APP_VERSION="${APP_VERSION:?APP_VERSION is required}"
 APP_BUILD_NUMBER="${APP_BUILD_NUMBER:?APP_BUILD_NUMBER is required}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-$ROOT_DIR/.release-assets/macos}"
 DEVELOPER_IDENTITY="${DEVELOPER_IDENTITY:-Developer ID Application: Burak ERENOĞLU (66K3EFBVB6)}"
+ENTITLEMENTS_PATH="$ROOT_DIR/apps/desktop/build/entitlements.mac.plist"
 
 for name in \
   MACOS_CERTIFICATE_P12_BASE64 \
@@ -71,6 +72,13 @@ CODESIGN_IDENTITY="$CODESIGN_IDENTITY" \
   "$ROOT_DIR/scripts/build-app.sh"
 
 APP_PATH="$ROOT_DIR/.build/$APP_BUNDLE_NAME"
+codesign --force \
+  --sign "$DEVELOPER_IDENTITY" \
+  --keychain "$KEYCHAIN_PATH" \
+  --timestamp \
+  --options runtime \
+  --entitlements "$ENTITLEMENTS_PATH" \
+  "$APP_PATH"
 SIGNING_INFO="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
 codesign --verify --deep --strict --verbose=4 "$APP_PATH"
 printf '%s\n' "$SIGNING_INFO" | grep -Fq "Authority=$DEVELOPER_IDENTITY"
