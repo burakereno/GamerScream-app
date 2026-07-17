@@ -2,25 +2,33 @@ services:
   livekit:
     image: livekit/livekit-server:latest
     ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "50000-50100:50000-50100/udp"
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      - "127.0.0.1:50000-50100:50000-50100/udp"
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+      - ./livekit.yaml:/etc/livekit.yaml:ro
     command: --config /etc/livekit.yaml
     restart: always
     networks:
       - sado-network
 
   backend:
-    build: ./apps/server
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"
     environment:
+      - NODE_ENV=development
       - PORT=3002
+      - HOST=0.0.0.0
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_HTTP_URL=http://livekit:7880
+      - LIVEKIT_CLIENT_URL=${LIVEKIT_CLIENT_URL:-ws://localhost:7880}
+      - APP_PIN=${APP_PIN:?Set APP_PIN outside this file}
+      - TOKEN_SECRET=${TOKEN_SECRET:-development-only-token-secret-change-me}
     depends_on:
       - livekit
     restart: always

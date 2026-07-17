@@ -1,0 +1,104 @@
+services:
+  livekit:
+    image: "${LIVEKIT_IMAGE:?Set LIVEKIT_IMAGE to a reviewed immutable tag or digest}"
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY outside this file}: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET outside this file}"
+    ports:
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./livekit.production.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: always
+    networks:
+      - gs-network
+
+  backend:
+    image: "${BACKEND_IMAGE:-gamerscream-backend:local}"
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    expose:
+      - "3002"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3002
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY outside this file}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET outside this file}"
+      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_HTTP_URL: http://livekit:7880
+      LIVEKIT_CLIENT_URL: "${LIVEKIT_CLIENT_URL:?Set an external wss:// URL}"
+      APP_PIN: "${APP_PIN:?Set APP_PIN outside this file}"
+      TOKEN_SECRET: "${TOKEN_SECRET:?Set an independent high-entropy secret}"
+      ADMIN_SECRET: "${ADMIN_SECRET:?Set ADMIN_SECRET outside this file}"
+      ADMIN_STATE_PATH: /workspace/apps/server/data/admin-state.json
+    volumes:
+      - backend_state:/workspace/apps/server/data
+    read_only: true
+    init: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 6
+    depends_on:
+      livekit:
+        condition: service_started
+    restart: always
+    networks:
+      - gs-network
+
+  caddy:
+    image: "${CADDY_IMAGE:?Set CADDY_IMAGE to a reviewed immutable tag or digest}"
+    environment:
+      DOMAIN: "${DOMAIN:?Run deploy.sh with the public domain}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    restart: always
+    networks:
+      - gs-network
+
+volumes:
+  backend_state:
+  caddy_data:
+  caddy_config:
+
+networks:
+  gs-network:
+    driver: bridge

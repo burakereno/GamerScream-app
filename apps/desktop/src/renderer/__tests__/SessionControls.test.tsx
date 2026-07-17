@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SessionControls } from '../components/SessionControls'
+import { withLocalSpeakingState } from '../hooks/app/useLocalSpeakingIndicator'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -37,6 +38,7 @@ const defaultProps = {
     username: 'TestUser',
     onConnect: vi.fn(),
     onDisconnect: vi.fn(),
+    onCancelReconnect: vi.fn(),
     onToggleMute: vi.fn(),
     inputMode: 'voice' as const,
     onToggleMuteAll: vi.fn(),
@@ -49,6 +51,18 @@ const defaultProps = {
 
 describe('SessionControls', () => {
     describe('Channel Click — Select Only (No Auto-Connect)', () => {
+        it('keeps the Session title informational and never starts a connection', () => {
+            const onConnect = vi.fn()
+            render(<SessionControls {...defaultProps} onConnect={onConnect} />)
+
+            const title = screen.getByRole('heading', { name: 'Session' })
+            fireEvent.click(title)
+            fireEvent.click(title)
+            fireEvent.click(title)
+
+            expect(onConnect).not.toHaveBeenCalled()
+        })
+
         it('clicking a channel does NOT call onConnect', () => {
             const onConnect = vi.fn()
             render(<SessionControls {...defaultProps} onConnect={onConnect} />)
@@ -96,6 +110,20 @@ describe('SessionControls', () => {
             expect(onDisconnect).toHaveBeenCalled()
         })
 
+        it('lets the user cancel an active reconnect', () => {
+            const onCancelReconnect = vi.fn()
+            render(
+                <SessionControls
+                    {...defaultProps}
+                    isReconnecting
+                    onCancelReconnect={onCancelReconnect}
+                />
+            )
+
+            fireEvent.click(screen.getByRole('button', { name: 'Cancel reconnect' }))
+            expect(onCancelReconnect).toHaveBeenCalledTimes(1)
+        })
+
         it('channels are disabled when already connected (except current)', () => {
             render(
                 <SessionControls
@@ -109,6 +137,56 @@ describe('SessionControls', () => {
             // Channel 2 should be disabled
             const ch2Button = screen.getByText('Channel 2').closest('button')
             expect(ch2Button).toBeDisabled()
+        })
+
+        it('keeps muted state visually dominant over a stale speaking signal', () => {
+            const { container } = render(
+                <SessionControls
+                    {...defaultProps}
+                    isConnected
+                    roomName="ch-1"
+                    players={[
+                        {
+                            identity: 'local', displayName: 'Local', isMuted: true,
+                            isSpeaking: true, isLocal: true, volume: 100
+                        },
+                        {
+                            identity: 'remote', displayName: 'Remote', isMuted: false,
+                            isSpeaking: true, isLocal: false, volume: 100
+                        }
+                    ]}
+                />
+            )
+
+            const soundwaves = container.querySelectorAll('.soundwave')
+            expect(soundwaves[0]).toHaveClass('muted')
+            expect(soundwaves[0]).not.toHaveClass('active')
+            expect(soundwaves[1]).toHaveClass('active')
+        })
+
+        it('renders derived local microphone activity without changing remote state', () => {
+            const visiblePlayers = withLocalSpeakingState([
+                {
+                    identity: 'local', displayName: 'Local', isMuted: false,
+                    isSpeaking: false, isLocal: true, volume: 100
+                },
+                {
+                    identity: 'remote', displayName: 'Remote', isMuted: false,
+                    isSpeaking: false, isLocal: false, volume: 100
+                }
+            ], true)
+            const { container } = render(
+                <SessionControls
+                    {...defaultProps}
+                    isConnected
+                    roomName="ch-1"
+                    players={visiblePlayers}
+                />
+            )
+
+            const soundwaves = container.querySelectorAll('.soundwave')
+            expect(soundwaves[0]).toHaveClass('active')
+            expect(soundwaves[1]).not.toHaveClass('active')
         })
     })
 
@@ -152,6 +230,60 @@ describe('SessionControls', () => {
 
             expect(screen.getByText('Enter PIN')).toBeInTheDocument()
         })
+
+        it('creates a channel and connects with the returned room capability', async () => {
+            const onCreateChannel = vi.fn().mockResolvedValue({
+                roomName: 'custom-created',
+                roomCapability: 'create-capability'
+            })
+            const onConnect = vi.fn()
+            render(
+                <SessionControls
+                    {...defaultProps}
+                    onCreateChannel={onCreateChannel}
+                    onConnect={onConnect}
+                />
+            )
+
+            fireEvent.click(screen.getByRole('button', { name: 'Create Channel' }))
+            fireEvent.change(screen.getByLabelText('Channel Name'), {
+                target: { value: 'Team Bravo' }
+            })
+            fireEvent.change(screen.getByRole('textbox', { name: /PIN \(optional\)/ }), {
+                target: { value: '2468' }
+            })
+            fireEvent.click(screen.getByRole('button', { name: 'Create & Join' }))
+
+            await waitFor(() => {
+                expect(onCreateChannel).toHaveBeenCalledWith('Team Bravo', '2468', 'TestUser')
+                expect(onConnect).toHaveBeenCalledWith('custom-created', 'create-capability')
+            })
+        })
+
+        it('connects to a protected channel with its verified room capability', async () => {
+            const onVerifyPin = vi.fn().mockResolvedValue('verified-capability')
+            const onConnect = vi.fn()
+            render(
+                <SessionControls
+                    {...defaultProps}
+                    channels={customChannels}
+                    onVerifyPin={onVerifyPin}
+                    onConnect={onConnect}
+                />
+            )
+
+            fireEvent.click(screen.getByText('Locked Room'))
+            fireEvent.change(screen.getByLabelText('Channel PIN'), {
+                target: { value: '1357' }
+            })
+            fireEvent.click(screen.getByRole('button', { name: 'Select channel' }))
+
+            await waitFor(() => {
+                expect(onVerifyPin).toHaveBeenCalledWith('custom-456', '1357')
+            })
+            fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+            expect(onConnect).toHaveBeenCalledWith('custom-456', 'verified-capability')
+        })
     })
 
     describe('UI State', () => {
@@ -166,10 +298,10 @@ describe('SessionControls', () => {
             const { rerender } = render(<SessionControls {...defaultProps} />)
 
             const muteBtn = screen.getByText('Mute').closest('button')!
-            expect(muteBtn.style.cursor).toBe('not-allowed')
+            expect(muteBtn).toBeDisabled()
 
             rerender(<SessionControls {...defaultProps} isConnected={true} roomName="ch-1" />)
-            expect(muteBtn.style.cursor).not.toBe('not-allowed')
+            expect(muteBtn).not.toBeDisabled()
         })
     })
 })

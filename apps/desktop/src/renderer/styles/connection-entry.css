@@ -1,0 +1,207 @@
+/* ============================================
+   CONNECTION INFO BAR
+   ============================================ */
+.connection-info-bar {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.connection-info-bar .highlight {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ============================================
+   ERROR
+   ============================================ */
+.error-banner {
+  background: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================
+   USERNAME ENTRY SCREEN
+   ============================================ */
+.username-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 52px 24px 24px;
+  background: var(--bg-primary);
+}
+
+.username-container {
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+}
+
+.username-logo {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-bottom: 8px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(249, 115, 22, 0.3));
+}
+
+.username-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.username-form {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.username-input {
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  outline: none;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.username-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.pin-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pin-gate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pin-gate-input {
+  flex: 1;
+  letter-spacing: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.pin-gate-error {
+  font-size: 11px;
+  color: #ef4444;
+  padding-left: 22px;
+}
+
+.btn-enter {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, opacity 0.15s, transform 0.15s;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+.btn-enter:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-enter:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-enter:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============================================
+   CUSTOM CHANNELS
+   ============================================ */
+
+.create-channel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s, opacity 0.2s, transform 0.2s;
+}
+
+.create-channel-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+.create-channel-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.custom-channels-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 10px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.custom-channels-divider::before,
+.custom-channels-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.channel-icons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.channel-lock-icon {
+  color: var(--warning, #f59e0b);
+  opacity: 0.8;
+}

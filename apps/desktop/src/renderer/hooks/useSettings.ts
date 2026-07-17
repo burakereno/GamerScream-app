@@ -1,22 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { AppSettings } from '../types'
+import { defaultSettings, mergeStoredSettings } from './settingsState'
 
 const STORAGE_KEY = 'gamerscream-settings'
-
-const defaultSettings: AppSettings = {
-    username: '',
-    microphoneId: '',
-    speakerId: '',
-    micLevel: 100,
-    channel: 1,
-    noiseSuppression: 100,
-    inputMode: 'voice',
-    pttKey: 'CapsLock',
-    muteToggleEnabled: false,
-    muteToggleKey: 'KeyM',
-    vadThreshold: 10,
-    joinSoundId: 'hero'
-}
 
 export function useSettings() {
     // SYNC init from localStorage — guarantees settings.username is available
@@ -25,7 +11,8 @@ export function useSettings() {
         try {
             const stored = localStorage.getItem(STORAGE_KEY)
             if (stored) {
-                return { ...defaultSettings, ...JSON.parse(stored) }
+                const merged = mergeStoredSettings(JSON.parse(stored))
+                if (merged) return merged
             }
         } catch {
             // ignore parse errors
@@ -42,8 +29,8 @@ export function useSettings() {
         ;(async () => {
             try {
                 const fileStored = await window.electronAPI?.getStoredSettings?.()
-                if (fileStored && (fileStored as Partial<AppSettings>).username) {
-                    const merged = { ...defaultSettings, ...(fileStored as Partial<AppSettings>) }
+                const merged = mergeStoredSettings(fileStored)
+                if (merged?.username) {
                     setSettings(merged)
                     // Backfill localStorage so next launch is instant
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))

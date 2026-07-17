@@ -29,7 +29,10 @@ Object.defineProperty(window, 'electronAPI', {
     value: {
         onUpdateAvailable: () => { },
         onUpdateDownloaded: () => { },
-        installUpdate: () => { },
+        onUpdateStatus: () => () => { },
+        getUpdateStatus: async () => ({ phase: 'idle' }),
+        installUpdate: async () => ({ ok: false, error: 'No update in tests' }),
+        getAppVersion: async () => '2.7.2',
         showNotification: () => { }
     }
 })

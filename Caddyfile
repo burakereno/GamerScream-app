@@ -1,11 +1,19 @@
 {$DOMAIN} {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
     # Backend API
     handle /api/* {
         reverse_proxy backend:3002
     }
 
-    # LiveKit WebSocket
-    handle /livekit/* {
+    # LiveKit signaling. Clients connect to wss://$DOMAIN and the SDK uses /rtc.
+    handle /rtc* {
         reverse_proxy livekit:7880
     }
 

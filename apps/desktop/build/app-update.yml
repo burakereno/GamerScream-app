@@ -1,0 +1,4 @@
+provider: github
+owner: burakereno
+repo: GamerScream-app
+updaterCacheDirName: gamerscream-updater

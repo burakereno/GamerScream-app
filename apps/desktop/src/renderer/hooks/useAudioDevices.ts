@@ -1,12 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { AudioDeviceInfo } from '../types'
 
-export function useAudioDevices() {
+const SETTINGS_STORAGE_KEY = 'gamerscream-settings'
+
+function getPersistedMicLevel(): number {
+    try {
+        const stored = localStorage.getItem(SETTINGS_STORAGE_KEY)
+        if (!stored) return 100
+        const value = JSON.parse(stored)?.micLevel
+        return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+            ? value
+            : 100
+    } catch {
+        return 100
+    }
+}
+
+export function useAudioDevices(enabled = true) {
     const [microphones, setMicrophones] = useState<AudioDeviceInfo[]>([])
     const [speakers, setSpeakers] = useState<AudioDeviceInfo[]>([])
     const [selectedMic, setSelectedMic] = useState<string>('')
     const [selectedSpeaker, setSelectedSpeaker] = useState<string>('')
-    const [micLevel, setMicLevel] = useState<number>(100)
+    const [micLevel, setMicLevel] = useState<number>(getPersistedMicLevel)
     const permissionGranted = useRef(false)
 
     // Lightweight enumerate — only calls enumerateDevices() (non-blocking)
@@ -34,14 +49,16 @@ export function useAudioDevices() {
             setSpeakers(spkrs)
 
             // Set defaults if not already set (use functional updates to avoid deps)
-            setSelectedMic(prev => (!prev && mics.length > 0) ? mics[0].deviceId : prev)
-            setSelectedSpeaker(prev => (!prev && spkrs.length > 0) ? spkrs[0].deviceId : prev)
+            setSelectedMic(prev => mics.some(mic => mic.deviceId === prev) ? prev : (mics[0]?.deviceId ?? ''))
+            setSelectedSpeaker(prev => spkrs.some(speaker => speaker.deviceId === prev) ? prev : (spkrs[0]?.deviceId ?? ''))
         } catch (err) {
             console.error('Failed to enumerate audio devices:', err)
         }
     }, [])
 
     useEffect(() => {
+        if (!enabled) return
+
         // Request mic permission once on mount to get labeled devices,
         // then enumerate. Subsequent calls skip getUserMedia.
         const init = async () => {
@@ -64,7 +81,7 @@ export function useAudioDevices() {
         return () => {
             navigator.mediaDevices.removeEventListener('devicechange', enumerateDevices)
         }
-    }, [enumerateDevices])
+    }, [enabled, enumerateDevices])
 
     return {
         microphones,

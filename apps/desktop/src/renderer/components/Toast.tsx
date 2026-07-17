@@ -24,7 +24,7 @@ export function useToast() {
 
 export function ToastContainer({ toasts }: { toasts: Toast[] }) {
     return (
-        <div className="toast-container">
+        <div className="toast-container" aria-live="polite" aria-atomic="false">
             {toasts.map(toast => (
                 <ToastItem key={toast.id} toast={toast} />
             ))}
@@ -44,8 +44,8 @@ function ToastItem({ toast }: { toast: Toast }) {
     }, [])
 
     return (
-        <div className={`toast toast-${toast.type} ${visible ? 'toast-visible' : ''}`}>
-            <span className={`toast-dot ${toast.type === 'join' ? 'dot-join' : 'dot-leave'}`} />
+        <div className={`toast toast-${toast.type} ${visible ? 'toast-visible' : ''}`} role="status">
+            <span className={`toast-dot ${toast.type === 'join' ? 'dot-join' : 'dot-leave'}`} aria-hidden="true" />
             <span className="toast-text">{toast.message}</span>
         </div>
     )

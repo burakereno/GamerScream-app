@@ -10,11 +10,11 @@ interface Props {
 export function SpeakerSelector({ speakers, selectedSpeaker, onSelect }: Props) {
     return (
         <div className="card">
-            <h2 className="card-title"><Headphones size={14} /> Speaker</h2>
+            <h2 className="card-title"><Headphones size={14} aria-hidden="true" /> Speaker</h2>
 
-            <label className="form-label">Output device</label>
+            <label className="form-label" htmlFor="speaker-device">Output device</label>
             <div className="select-wrapper">
-                <select value={selectedSpeaker} onChange={(e) => onSelect(e.target.value)}>
+                <select id="speaker-device" value={selectedSpeaker} onChange={(e) => onSelect(e.target.value)}>
                     {speakers.map((spk) => (
                         <option key={spk.deviceId} value={spk.deviceId}>
                             {spk.label}

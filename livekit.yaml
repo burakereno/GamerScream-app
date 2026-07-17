@@ -1,5 +1,5 @@
-# LiveKit Server Configuration
-# This file is used for both local development and production deployment
+# LiveKit Server Configuration — local development only.
+# Production uses livekit.production.yaml with LIVEKIT_KEYS supplied externally.
 
 port: 7880
 rtc:

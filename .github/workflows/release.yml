@@ -1,0 +1,290 @@
+name: Verified Desktop Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verified-desktop-release
+  cancel-in-progress: false
+
+env:
+  PNPM_VERSION: 10.30.1
+
+jobs:
+  prepare:
+    name: Test source and select version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Check out the selected source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Validate source and determine the selected version
+        id: version
+        shell: bash
+        env:
+          VERSION_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          source .github/release-contract.env
+          [[ "$GITHUB_REPOSITORY" == "$GITHUB_OWNER/$GITHUB_REPO" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+
+          latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | sed -n '1p')"
+          if [[ -z "$latest" ]]; then
+            version="0.1.0"
+          else
+            [[ "$latest" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || {
+              echo "Latest tag is not a stable semantic version: $latest" >&2
+              exit 1
+            }
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            case "$VERSION_BUMP" in
+              patch) patch=$((patch + 1)) ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              *) echo "Unsupported version increment: $VERSION_BUMP" >&2; exit 1 ;;
+            esac
+            version="$major.$minor.$patch"
+          fi
+          tag="v$version"
+          git rev-parse "$tag" >/dev/null 2>&1 && { echo "Tag already exists: $tag" >&2; exit 1; }
+          printf 'version=%s\ntag=%s\n' "$version" "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned dependencies and run release gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global "pnpm@$PNPM_VERSION"
+          pnpm install --frozen-lockfile
+          pnpm --filter desktop test
+          pnpm --filter desktop exec tsc --noEmit
+          pnpm --filter server test
+          pnpm --filter server build
+          tests/release_contract_test.sh
+
+  build-macos:
+    name: Sign, notarize, and verify macOS
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      APP_BUILD_NUMBER: ${{ github.run_number }}
+      ARTIFACTS_DIR: ${{ github.workspace }}/.release-assets/macos
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pinned dependencies
+        shell: bash
+        run: |
+          npm install --global "pnpm@$PNPM_VERSION"
+          pnpm install --frozen-lockfile
+
+      - name: Build verified macOS assets
+        shell: bash
+        run: scripts/build-macos-release.sh
+
+      - name: Independently verify macOS trust and update metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/release-contract.env
+          app="$GITHUB_WORKSPACE/.build/$APP_BUNDLE_NAME"
+          dmg="$ARTIFACTS_DIR/$DMG_ASSET_NAME"
+          manifest="$ARTIFACTS_DIR/$MANIFEST_ASSET_NAME"
+
+          # build-macos-release.sh signs with --options runtime and performs the
+          # notarytool submit operations before these independent checks.
+          codesign --verify --deep --strict --verbose=4 "$app"
+          app_signing="$(codesign -dv --verbose=4 "$app" 2>&1)"
+          grep -Fq "TeamIdentifier=$TEAM_IDENTIFIER" <<<"$app_signing"
+          grep -Eq 'flags=.*runtime' <<<"$app_signing"
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
+
+          codesign --verify --strict --verbose=4 "$dmg"
+          dmg_signing="$(codesign -dv --verbose=4 "$dmg" 2>&1)"
+          grep -Fq "TeamIdentifier=$TEAM_IDENTIFIER" <<<"$dmg_signing"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          xcrun stapler validate "$dmg"
+
+          [[ "$MANIFEST_ASSET_NAME" == "GamerScream.dmg.update.json" ]]
+          expected_sha="$(shasum -a 256 "$dmg" | awk '{print $1}')"
+          actual_sha="$(node -e 'const fs=require("node:fs"); console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).sha256)' "$manifest")"
+          [[ "$actual_sha" == "$expected_sha" ]]
+
+      - name: Upload verified macOS assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-release
+          path: .release-assets/macos/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows (unsigned)
+    needs: prepare
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      APP_BUILD_NUMBER: ${{ github.run_number }}
+      ARTIFACTS_DIR: ${{ github.workspace }}/.release-assets/windows
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pinned dependencies
+        shell: pwsh
+        run: |
+          npm install --global "pnpm@$env:PNPM_VERSION"
+          pnpm install --frozen-lockfile
+
+      - name: Build verified Windows assets
+        shell: pwsh
+        run: ./scripts/build-windows-release.ps1
+
+      - name: Upload verified Windows assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-release
+          path: .release-assets/windows/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish one complete release
+    needs: [prepare, build-macos, build-windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download macOS assets with digest enforcement
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-release
+          path: .release-assets/all
+
+      - name: Download Windows assets with digest enforcement
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-release
+          path: .release-assets/all
+
+      - name: Validate the complete immutable asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .github/release-contract.env
+          set +a
+          assets="$GITHUB_WORKSPACE/.release-assets/all"
+          expected=(
+            "$DMG_ASSET_NAME"
+            "$MANIFEST_ASSET_NAME"
+            "$APP_NAME.zip"
+            latest-mac.yml
+            GamerScream-Setup.exe
+            GamerScream-Setup.exe.blockmap
+            latest.yml
+          )
+          for asset in "${expected[@]}"; do
+            [[ -s "$assets/$asset" ]] || { echo "Missing release asset: $asset" >&2; exit 1; }
+          done
+          [[ "$(find "$assets" -maxdepth 1 -type f | wc -l | tr -d ' ')" == "${#expected[@]}" ]]
+
+          node - "$assets" <<'NODE'
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const crypto = require('node:crypto')
+          const assets = process.argv[2]
+          const manifest = JSON.parse(fs.readFileSync(path.join(assets, process.env.MANIFEST_ASSET_NAME), 'utf8'))
+          const dmg = fs.readFileSync(path.join(assets, process.env.DMG_ASSET_NAME))
+          const digest = crypto.createHash('sha256').update(dmg).digest('hex')
+          if (manifest.version !== process.env.APP_VERSION) throw new Error('manifest version mismatch')
+          if (manifest.asset !== process.env.DMG_ASSET_NAME) throw new Error('manifest asset mismatch')
+          if (manifest.bundleIdentifier !== process.env.BUNDLE_IDENTIFIER) throw new Error('manifest bundle mismatch')
+          if (manifest.teamIdentifier !== process.env.TEAM_IDENTIFIER) throw new Error('manifest team mismatch')
+          if (manifest.sha256 !== digest) throw new Error('manifest digest mismatch')
+
+          function scalar(text, key) {
+            const match = text.match(new RegExp(`^${key}:\\s*(.+?)\\s*$`, 'm'))
+            if (!match) throw new Error(`missing ${key}`)
+            return match[1].trim().replace(/^['"]|['"]$/g, '')
+          }
+
+          function validateFeed(feedName, assetName) {
+            const text = fs.readFileSync(path.join(assets, feedName), 'utf8')
+            const asset = fs.readFileSync(path.join(assets, assetName))
+            const expectedSha512 = crypto.createHash('sha512').update(asset).digest('base64')
+            const expectedSize = fs.statSync(path.join(assets, assetName)).size
+            if (scalar(text, 'version') !== process.env.APP_VERSION) throw new Error(`${feedName} version mismatch`)
+            if (scalar(text, 'path') !== assetName) throw new Error(`${feedName} path mismatch`)
+            if (scalar(text, 'sha512') !== expectedSha512) throw new Error(`${feedName} SHA-512 mismatch`)
+            if (!new RegExp(`^\\s*size:\\s*${expectedSize}\\s*$`, 'm').test(text)) {
+              throw new Error(`${feedName} size mismatch`)
+            }
+          }
+
+          validateFeed('latest-mac.yml', 'GamerScream.zip')
+          validateFeed('latest.yml', 'GamerScream-Setup.exe')
+          NODE
+
+      - name: Tag only after verification, create a draft, then publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/release-contract.env
+          [[ -z "$(git status --porcelain --untracked-files=no)" ]]
+          git rev-parse "$RELEASE_TAG" >/dev/null 2>&1 && { echo "Tag already exists." >&2; exit 1; }
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"
+          assets="$GITHUB_WORKSPACE/.release-assets/all"
+          gh release create "$RELEASE_TAG" "$assets"/* \
+            --repo "$GITHUB_OWNER/$GITHUB_REPO" \
+            --title "$APP_NAME $RELEASE_TAG" \
+            --generate-notes \
+            --verify-tag \
+            --draft
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_OWNER/$GITHUB_REPO" \
+            --draft=false \
+            --latest

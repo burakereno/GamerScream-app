@@ -1,96 +1,102 @@
 ---
-description: Release a new version of GamerScream desktop app
+description: Publish one signed and verified GamerScream desktop release
 ---
 
-# GamerScream Release Workflow
+# GamerScream Verified Release
 
-This workflow handles the full release process for GamerScream desktop app. Run this when the user says "uygulamayı güncelle" or "release new version".
+Use this workflow only after the user explicitly authorizes a release. Preparing
+code or a local preview never authorizes a commit, push, deployment, tag, or
+GitHub release.
 
-> **CRITICAL:** Artifact names are version-independent. Do NOT add version numbers to artifact names.
-> - Mac: `GamerScream.dmg` (set in `electron-builder.yml` → `mac.artifactName`)
-> - Windows: `GamerScream-Setup.exe` (set in `electron-builder.yml` → `win.artifactName`)
-> - Web links use `/releases/latest/download/GamerScream.dmg` and `/releases/latest/download/GamerScream-Setup.exe`
-> - These auto-resolve to the latest release. **NEVER update download links in the web repo.**
+The user does not need to type terminal commands. Codex performs readiness
+checks and one-time credential setup; releases are started from the GitHub
+Actions web interface.
 
-## Steps
+## Immutable release contract
 
-// turbo-all
+`.github/release-contract.env` is the source of truth for repository, bundle,
+team, server URL, and artifact names. Public download names never include a
+version:
 
-### 1. Determine the new version
+- `GamerScream.dmg`
+- `GamerScream.dmg.update.json`
+- `GamerScream.zip`
+- `latest-mac.yml`
+- `GamerScream-Setup.exe`
+- `GamerScream-Setup.exe.blockmap`
+- `latest.yml`
 
-- Read the current version from `apps/desktop/package.json` → `version` field
-- If the user specified a version, use that
-- Otherwise, **auto-increment the patch version** (e.g., `1.0.0` → `1.0.1`, `1.1.0` → `1.1.1`)
-- If changes include new features, increment minor (e.g., `1.0.1` → `1.1.0`)
-- Store the new version as `NEW_VERSION`
+The website uses `/releases/latest/download/...`; do not edit its download URLs
+for a routine release.
 
-### 2. Update version in all files
+## One-time signing setup
 
-Update the version string in these files:
+Before the first release, verify all of the following without exposing secret
+values in logs:
 
-```
-apps/desktop/package.json          → "version": "NEW_VERSION"
-apps/server/package.json           → "version": "NEW_VERSION"
-apps/desktop/src/renderer/App.tsx  → const APP_VERSION = 'NEW_VERSION'
-```
+1. The login Keychain contains exactly this usable identity:
+   `Developer ID Application: Burak ERENOĞLU (66K3EFBVB6)`.
+2. GitHub CLI is authenticated to `burakereno/GamerScream-app` with permission
+   to manage Actions secrets.
+3. These macOS repository secrets exist:
+   `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`,
+   `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and
+   `APPLE_APP_SPECIFIC_PASSWORD`.
 
-### 3. Build and verify server (if server code changed)
+Windows artifacts are intentionally unsigned by product decision. The release
+contract must say `WINDOWS_SIGNING=unsigned`, certificate auto-discovery must be
+disabled, and the build must verify that the installer is actually unsigned.
+Windows SmartScreen may therefore show an unknown-publisher warning. Feed hash,
+size, asset-name, and version validation remain mandatory.
 
-```bash
-cd /Users/burakerenoglu/Documents/Gemini/GamerScream && pnpm --filter server build
-```
+Use the `macos-developer-id-release` readiness and secret-configuration helpers.
+The user may need to complete Apple/GitHub login, 2FA, or a hidden password
+prompt, but must never paste credentials into chat or a visible terminal.
 
-If server code changed, also deploy to production:
+## Release gates
 
-```bash
-scp -i /Users/burakerenoglu/Documents/Gemini/GamerScream/apps/desktop/build/ssh-key-2026-02-20.key -r /Users/burakerenoglu/Documents/Gemini/GamerScream/apps/server/dist/* ubuntu@144.24.183.24:~/gamerscream/dist/
-ssh -i /Users/burakerenoglu/Documents/Gemini/GamerScream/apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo systemctl restart gamerscream && sleep 2 && curl -s http://localhost:3002/api/health"
-```
+Before asking the user to authorize a release:
 
-### 4. Commit, tag, and push
+1. Review both repository worktrees and preserve unrelated user changes.
+2. Run desktop and server tests, type checks, production builds, and
+   `tests/release_contract_test.sh`.
+3. Confirm the macOS signing identity and all required GitHub secret names.
+4. Confirm the intended source is the current `main` branch on GitHub.
+5. Report any blocker. Do not weaken signing, notarization, or asset checks.
 
-```bash
-cd /Users/burakerenoglu/Documents/Gemini/GamerScream
-git add -A
-git commit -m "v${NEW_VERSION}"
-git tag v${NEW_VERSION}
-git push origin main --tags
-```
+Server deployment is a separate operation and needs separate explicit approval.
+The desktop release workflow does not deploy the server.
 
-### 5. Verify GitHub Actions build
+## Start a release without terminal commands
 
-- The push with the `v*` tag triggers the `Build & Release` workflow
-- Check status: `https://github.com/burakereno/GamerScream-app/actions`
-- Wait for **both** Mac and Windows builds to complete (~5-10 min)
-- Verify the release has the correct artifact names:
-  - `GamerScream.dmg` (NOT `GamerScream-X.X.X-arm64.dmg`)
-  - `GamerScream-Setup.exe` (NOT `GamerScream-Setup-X.X.X.exe`)
+After explicit approval:
 
-### 6. Verify web download links work
+1. Open the repository's **Actions** page in GitHub.
+2. Select **Verified Desktop Release**.
+3. Select **Run workflow**, choose `main` and the patch/minor/major increment,
+   then confirm.
+4. Monitor all four jobs: prepare, macOS, Windows, and publish.
 
-After the GitHub Actions build completes, verify that web download links resolve correctly:
+The workflow derives the selected increment from the latest stable tag. It builds
+that version into the application metadata; no hard-coded renderer version needs
+editing.
 
-```bash
-curl -sI "https://github.com/burakereno/GamerScream-app/releases/latest/download/GamerScream.dmg" | head -3
-curl -sI "https://github.com/burakereno/GamerScream-app/releases/latest/download/GamerScream-Setup.exe" | head -3
-```
+The publish job runs only after both platform builds pass. It checks the exact
+asset set and update metadata, then creates the tag and release. Never create a
+manual tag first and never upload unsigned replacement assets.
 
-Both should return **302 redirect** (not 404). If they return 404:
-- Check that the build completed successfully
-- Check that `electron-builder.yml` artifact names don't include `${version}`
-- The web page at `/Users/burakerenoglu/Documents/Gemini/GamerScream-web/app/page.tsx` should NOT need any changes
+## Required verification
 
-### 7. Server deployment reminder
+After completion, verify in GitHub's web interface:
 
-If server changes were made, remind the user:
-- Production server at `144.24.183.24` was updated in Step 3
-- Verify with: `curl -s https://gamerscream.burakereno.com/api/health`
+- Both platform jobs succeeded.
+- macOS app and DMG signing, hardened runtime, notarization, stapling, Gatekeeper,
+  bundle identifier, and Team ID checks succeeded.
+- The Windows installer is unsigned as declared by the release contract, and
+  its updater feed path, version, SHA-512, and size match the published bytes.
+- The release contains exactly the seven immutable assets listed above.
+- The latest macOS and Windows website download links resolve to that release.
+- The desktop updater feed points to the same version and hashes.
 
-### 8. Report to user
-
-List what was done:
-- Old version → New version
-- Files changed
-- GitHub Actions status link: `https://github.com/burakereno/GamerScream-app/actions`
-- Release page: `https://github.com/burakereno/GamerScream-app/releases/latest`
-- Download link verification results
+Report the old and new versions, workflow URL, release URL, download checks, and
+whether a separately authorized server deployment occurred.

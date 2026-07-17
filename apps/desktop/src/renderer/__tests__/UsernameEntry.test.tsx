@@ -16,8 +16,8 @@ describe('UsernameEntry', () => {
             />
         )
 
-        fireEvent.change(screen.getByPlaceholderText('App PIN'), {
-            target: { value: '1520' }
+        fireEvent.change(screen.getByLabelText('App PIN'), {
+            target: { value: '8642' }
         })
         fireEvent.click(screen.getByRole('button', { name: /enter voice chat/i }))
 

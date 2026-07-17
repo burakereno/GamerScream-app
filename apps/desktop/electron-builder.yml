@@ -1,9 +1,18 @@
 appId: com.gamerscream.app
 productName: GamerScream
-copyright: Copyright © 2025 GamerScream
+executableName: GamerScream
+copyright: Copyright © 2026 GamerScream
 
 directories:
   output: release
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: build/app-update.yml
+    to: app-update.yml
 
 publish:
   provider: github
@@ -13,27 +22,28 @@ publish:
 
 mac:
   target:
-    - dmg
     - zip
   category: public.app-category.social-networking
   icon: build/ico.icns
   artifactName: ${productName}.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: GamerScream uses your microphone for voice chat.
+    NSLocalNetworkUsageDescription: GamerScream connects to voice-chat services on your network.
 
 win:
   target:
     - nsis
   icon: build/ico.ico
   artifactName: ${productName}-Setup.${ext}
+  # Windows releases are intentionally unsigned. Keep this explicit so the
+  # updater does not expect publisher metadata that cannot exist.
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: true
   allowToChangeInstallationDirectory: false
-
-dmg:
-  contents:
-    - x: 130
-      y: 220
-    - x: 410
-      y: 220
-      type: link
-      path: /Applications

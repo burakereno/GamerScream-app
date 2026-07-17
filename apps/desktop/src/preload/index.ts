@@ -1,14 +1,30 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
     // Auto-update
     onUpdateAvailable: (callback: (info: { version: string }) => void) => {
-        ipcRenderer.on('update-available', (_event, info) => callback(info))
+        const listener = (_event: IpcRendererEvent, info: { version: string }) => callback(info)
+        ipcRenderer.on('update-available', listener)
+        return () => ipcRenderer.removeListener('update-available', listener)
     },
     onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
-        ipcRenderer.on('update-downloaded', (_event, info) => callback(info))
+        const listener = (_event: IpcRendererEvent, info: { version: string }) => callback(info)
+        ipcRenderer.on('update-downloaded', listener)
+        return () => ipcRenderer.removeListener('update-downloaded', listener)
+    },
+    onUpdateStatus: (callback: (status: {
+        phase: 'idle' | 'checking' | 'up-to-date' | 'downloading' | 'downloaded' | 'error'
+        version?: string
+        percent?: number
+        error?: string
+    }) => void) => {
+        const listener = (_event: IpcRendererEvent, status: Parameters<typeof callback>[0]) => callback(status)
+        ipcRenderer.on('update-status', listener)
+        return () => ipcRenderer.removeListener('update-status', listener)
     },
     installUpdate: () => ipcRenderer.invoke('install-update'),
+    getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
     // Native OS notifications
     showNotification: (title: string, body: string) => {

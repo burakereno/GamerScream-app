@@ -1,10 +1,33 @@
 import { useState } from 'react'
 import { Shield, Key, UserX, Lock, ArrowLeft, Loader2, Check, AlertTriangle } from 'lucide-react'
+import { Dialog } from './Dialog'
 
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3002'
 
 interface AdminPanelProps {
     onClose: () => void
+}
+
+interface AdminActionResponse {
+    success?: boolean
+    message?: string
+    error?: string
+    kicked?: number
+    failed?: number
+}
+
+type ActionResult = {
+    tone: 'success' | 'warning' | 'error'
+    message: string
+}
+
+function withOperationCounts(message: string, data: AdminActionResponse): string {
+    const counts = [
+        typeof data.kicked === 'number' ? `Participants removed: ${data.kicked}.` : '',
+        typeof data.failed === 'number' ? `LiveKit operations failed: ${data.failed}.` : ''
+    ].filter(Boolean).join(' ')
+
+    return counts ? `${message} ${counts}` : message
 }
 
 export function AdminPanel({ onClose }: AdminPanelProps) {
@@ -15,8 +38,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
     const [newPin, setNewPin] = useState('')
     const [actionLoading, setActionLoading] = useState('')
-    const [actionResult, setActionResult] = useState('')
-    const [actionIsError, setActionIsError] = useState(false)
+    const [actionResult, setActionResult] = useState<ActionResult | null>(null)
     const [confirmAction, setConfirmAction] = useState<{ endpoint: string; label: string; body?: Record<string, unknown> } | null>(null)
 
     const verify = async () => {
@@ -42,25 +64,34 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const adminAction = async (endpoint: string, body: Record<string, unknown> = {}) => {
         setConfirmAction(null)
         setActionLoading(endpoint)
-        setActionResult('')
-        setActionIsError(false)
+        setActionResult(null)
         try {
             const res = await fetch(`${SERVER_URL}/api/admin/${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ secret: adminSecret, ...body })
             })
-            const data = await res.json()
-            if (res.ok) {
-                setActionResult(data.message || `Kicked ${data.kicked} users`)
+            const data = await res.json() as AdminActionResponse
+            if (!res.ok) {
+                setActionResult({
+                    tone: 'error',
+                    message: withOperationCounts(data.error || data.message || 'Unknown error', data)
+                })
+            } else if (res.status === 207 || data.success === false) {
+                setActionResult({
+                    tone: 'warning',
+                    message: withOperationCounts(data.message || 'Admin action completed only partially. Retry the action.', data)
+                })
                 if (endpoint === 'change-pin') setNewPin('')
             } else {
-                setActionIsError(true)
-                setActionResult(data.error || 'Unknown error')
+                setActionResult({
+                    tone: 'success',
+                    message: withOperationCounts(data.message || 'Admin action completed.', data)
+                })
+                if (endpoint === 'change-pin') setNewPin('')
             }
         } catch {
-            setActionIsError(true)
-            setActionResult('Connection error')
+            setActionResult({ tone: 'error', message: 'Connection error' })
         }
         setActionLoading('')
     }
@@ -73,8 +104,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         <div className="admin-page">
             {/* Header */}
             <div className="admin-page-header">
-                <button className="admin-back-btn" onClick={onClose}>
-                    <ArrowLeft size={18} />
+                <button type="button" className="admin-back-btn" aria-label="Close admin panel" onClick={onClose}>
+                    <ArrowLeft size={18} aria-hidden="true" />
                 </button>
                 <Shield size={16} color="#f97316" />
                 <span>Admin</span>
@@ -85,27 +116,40 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     <div className="admin-login-card">
                         <Lock size={24} color="var(--text-muted)" />
                         <p className="admin-login-text">Enter admin secret to continue</p>
-                        <input
-                            type="password"
-                            value={adminSecret}
-                            onChange={e => { setAdminSecret(e.target.value); setError('') }}
-                            onKeyDown={e => e.key === 'Enter' && verify()}
-                            placeholder="Admin secret"
-                            className="admin-input"
-                            autoFocus
-                        />
-                        {error && <p className="admin-error">{error}</p>}
-                        <button className="admin-action-btn accent" onClick={verify} disabled={verifying || !adminSecret}>
-                            {verifying ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
-                            Verify
-                        </button>
+                        <form onSubmit={(event) => { event.preventDefault(); verify() }}>
+                            <label className="admin-field-label">
+                                Admin secret
+                                <input
+                                    type="password"
+                                    name="adminSecret"
+                                    value={adminSecret}
+                                    onChange={e => { setAdminSecret(e.target.value); setError('') }}
+                                    placeholder="Enter admin secret…"
+                                    className="admin-input"
+                                    autoComplete="current-password"
+                                    autoFocus
+                                />
+                            </label>
+                            {error && <p className="admin-error" role="alert">{error}</p>}
+                            <button type="submit" className="admin-action-btn accent" disabled={verifying || !adminSecret}>
+                                {verifying ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
+                                Verify
+                            </button>
+                        </form>
                     </div>
                 </div>
             ) : (
                 <div className="admin-page-content">
                     {actionResult && (
-                        <div className={actionIsError ? 'admin-result error' : 'admin-result'}>
-                            {actionIsError ? <AlertTriangle size={12} /> : <Check size={12} />} {actionResult}
+                        <div
+                            className={`admin-result ${actionResult.tone}`}
+                            role={actionResult.tone === 'success' ? 'status' : 'alert'}
+                            aria-atomic="true"
+                        >
+                            {actionResult.tone === 'success'
+                                ? <Check size={12} aria-hidden="true" />
+                                : <AlertTriangle size={12} aria-hidden="true" />}
+                            <span>{actionResult.message}</span>
                         </div>
                     )}
 
@@ -116,18 +160,25 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             <span>Change App PIN</span>
                         </div>
                         <p className="admin-card-desc">Changes PIN and invalidates all existing tokens</p>
-                        <input
-                            type="text"
-                            value={newPin}
-                            onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
-                            placeholder="New PIN (min 4 digits)"
-                            className="admin-input"
-                            maxLength={8}
-                        />
+                        <label className="admin-field-label">
+                            New app PIN
+                            <input
+                                type="text"
+                                name="newAppPin"
+                                value={newPin}
+                                onChange={e => setNewPin(e.target.value.slice(0, 8))}
+                                placeholder="4–8 digits…"
+                                className="admin-input"
+                                maxLength={8}
+                                inputMode="numeric"
+                                pattern="[0-9]{4,8}"
+                                autoComplete="new-password"
+                            />
+                        </label>
                         <button
                             className="admin-action-btn accent"
                             onClick={() => requestConfirm('change-pin', 'Change PIN? All users will be logged out.', { newPin })}
-                            disabled={!!actionLoading || newPin.length < 4}
+                            disabled={!!actionLoading || !/^\d{4,8}$/.test(newPin)}
                         >
                             {actionLoading === 'change-pin' ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
                             Change PIN
@@ -170,21 +221,25 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 </div>
             )}
 
-            {/* Confirmation modal */}
-            {confirmAction && (
-                <div className="confirm-overlay" onClick={() => setConfirmAction(null)}>
-                    <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+            <Dialog
+                open={!!confirmAction}
+                title="Confirm admin action"
+                onClose={() => setConfirmAction(null)}
+                className="confirm-modal"
+            >
                         <AlertTriangle size={20} color="#f97316" />
-                        <p className="confirm-text">{confirmAction.label}</p>
+                        <p className="confirm-text">{confirmAction?.label}</p>
                         <div className="confirm-buttons">
-                            <button className="confirm-btn cancel" onClick={() => setConfirmAction(null)}>Cancel</button>
-                            <button className="confirm-btn proceed" onClick={() => adminAction(confirmAction.endpoint, confirmAction.body)}>
+                            <button type="button" className="confirm-btn cancel" onClick={() => setConfirmAction(null)}>Cancel</button>
+                            <button
+                                type="button"
+                                className="confirm-btn proceed"
+                                onClick={() => confirmAction && adminAction(confirmAction.endpoint, confirmAction.body)}
+                            >
                                 Confirm
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
+            </Dialog>
         </div>
     )
 }

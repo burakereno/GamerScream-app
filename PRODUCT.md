@@ -9,7 +9,7 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | Desktop App | Electron + Vite + React + TypeScript | `apps/desktop/` |
 | Backend API | Node.js + Express 5 | `apps/server/` |
 | Voice Engine | LiveKit (WebRTC) | Self-hosted on Oracle Cloud VM |
-| Landing Page | Next.js | `GamerScream-web/` |
+| Landing Page | Next.js | `../web/` |
 
 **Monorepo** managed with `pnpm workspaces`.
 
@@ -28,7 +28,7 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 - Server stores custom channels in-memory (`Map<string, CustomChannel>`)
 
 ### App-Level PIN Gate
-- **PIN 1520** required on first launch or new device
+- An app-level PIN supplied through the server environment is required on first launch or a new device
 - HMAC-based access token generated server-side, stored in `localStorage`
 - All API endpoints protected via `x-access-token` header
 - PIN never exposed to the client — validated server-side only
@@ -120,7 +120,7 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | `LIVEKIT_URL` | `ws://localhost:7880` | LiveKit WebSocket URL (server-side) |
 | `LIVEKIT_HTTP_URL` | `http://localhost:7880` | LiveKit HTTP URL (room service) |
 | `LIVEKIT_CLIENT_URL` | `= LIVEKIT_URL` | LiveKit URL returned to clients (external-facing) |
-| `APP_PIN` | `1520` | App-level PIN for access |
+| `APP_PIN` | *(required)* | App-level PIN for access; store outside source control |
 | `TOKEN_SECRET` | derived | HMAC secret for access tokens |
 | `ADMIN_SECRET` | *(required)* | Admin panel secret — must be set, no fallback |
 
@@ -167,7 +167,7 @@ ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo syst
 ## Distribution
 
 - **Mac**: `.dmg` via `electron-builder` → GitHub Releases
-- **Windows**: `.exe` via `electron-builder` → GitHub Releases
+- **Windows**: unsigned `.exe` via `electron-builder` → GitHub Releases; SmartScreen may show an unknown-publisher warning
 - **Landing page**: [gamerscream.vercel.app](https://gamerscream.vercel.app) with download links
 
 ## Upcoming / TODO

@@ -1,8 +1,10 @@
 export interface ElectronAPI {
-    getServerUrl: () => Promise<string>
-    onUpdateAvailable: (callback: (info: { version: string }) => void) => void
-    onUpdateDownloaded: (callback: (info: { version: string }) => void) => void
-    installUpdate: () => void
+    onUpdateAvailable: (callback: (info: { version: string }) => void) => () => void
+    onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void
+    onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void
+    installUpdate: () => Promise<InstallUpdateResult>
+    getUpdateStatus: () => Promise<UpdateStatus>
+    getAppVersion: () => Promise<string>
     showNotification: (title: string, body: string) => void
     // Push-to-Talk
     onPttKeyDown: (callback: () => void) => void
@@ -19,6 +21,20 @@ export interface ElectronAPI {
     removeStoredToken: () => Promise<boolean>
     getStoredSettings: () => Promise<Record<string, unknown> | null>
     setStoredSettings: (data: string) => Promise<boolean>
+    getDeviceId: () => Promise<string | null>
+    setDeviceId: (id: string) => Promise<boolean>
+}
+
+export interface UpdateStatus {
+    phase: 'idle' | 'checking' | 'up-to-date' | 'downloading' | 'downloaded' | 'error'
+    version?: string
+    percent?: number
+    error?: string
+}
+
+export interface InstallUpdateResult {
+    ok: boolean
+    error?: string
 }
 
 declare global {
