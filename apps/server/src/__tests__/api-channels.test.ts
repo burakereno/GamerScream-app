@@ -155,6 +155,69 @@ describe('Server API channels', () => {
             expect(accepted.body).toEqual({ ok: true })
         })
 
+        it('returns fresh participant names after an authorized presence refresh', async () => {
+            const token = getAccessToken()
+            const joined = await request(app)
+                .post('/api/token')
+                .set('x-access-token', token)
+                .send({ username: 'TestUser', room: 'ch-2' })
+            expect(joined.status).toBe(200)
+
+            liveKitState.participants.set('ch-2', [
+                { identity: 'mac-id', name: 'mac' },
+                { identity: 'burak-id', name: 'Burak' },
+                { identity: 'alper-id', name: 'Alper' }
+            ])
+            const initial = await request(app)
+                .get('/api/room-players/ch-2')
+                .set('x-access-token', token)
+            expect(initial.body.players).toEqual(['mac', 'Burak', 'Alper'])
+
+            liveKitState.participants.set('ch-2', [
+                { identity: 'mac-id', name: 'mac' },
+                { identity: 'burak-id', name: 'Burak' }
+            ])
+            const refreshedPresence = await request(app)
+                .post('/api/presence-refresh')
+                .set('x-access-token', token)
+                .send({ room: 'ch-2' })
+            expect(refreshedPresence.status).toBe(202)
+
+            const refreshedNames = await request(app)
+                .get('/api/room-players/ch-2')
+                .set('x-access-token', token)
+            expect(refreshedNames.body.players).toEqual(['mac', 'Burak'])
+        })
+
+        it('reconciles participant names when the authoritative room count changes', async () => {
+            const token = getAccessToken()
+            liveKitState.rooms = [{ name: 'ch-2', numParticipants: 3 }]
+            liveKitState.participants.set('ch-2', [
+                { identity: 'mac-id', name: 'mac' },
+                { identity: 'burak-id', name: 'Burak' },
+                { identity: 'alper-id', name: 'Alper' }
+            ])
+            const initial = await request(app)
+                .get('/api/room-players/ch-2')
+                .set('x-access-token', token)
+            expect(initial.body.players).toEqual(['mac', 'Burak', 'Alper'])
+
+            liveKitState.rooms = [{ name: 'ch-2', numParticipants: 2 }]
+            liveKitState.participants.set('ch-2', [
+                { identity: 'mac-id', name: 'mac' },
+                { identity: 'burak-id', name: 'Burak' }
+            ])
+            const rooms = await request(app)
+                .get('/api/rooms')
+                .set('x-access-token', token)
+            expect(rooms.body.rooms.find((room: { name: string }) => room.name === 'ch-2').playerCount).toBe(2)
+
+            const reconciledNames = await request(app)
+                .get('/api/room-players/ch-2')
+                .set('x-access-token', token)
+            expect(reconciledNames.body.players).toEqual(['mac', 'Burak'])
+        })
+
         it('rejects invalid, unknown, and unauthorized presence refresh requests', async () => {
             const token = getAccessToken()
             expect((await request(app)

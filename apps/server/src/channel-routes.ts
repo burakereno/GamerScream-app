@@ -48,6 +48,11 @@ export function createChannelApi(dependencies: {
             const liveRooms = await withTimeout(roomService.listRooms())
             const result = channels.buildRoomList(liveRooms)
             for (const roomName of result.deletedRoomNames) playerCache.delete(roomName)
+            for (const room of result.rooms) {
+                const roomName = room.roomName || room.name
+                const cached = playerCache.get(roomName)
+                if (cached && cached.names.length !== room.playerCount) playerCache.delete(roomName)
+            }
             return result.rooms
         })()
         try {
@@ -211,6 +216,7 @@ export function createChannelApi(dependencies: {
             if (!channels.canViewPlayers(session.jti, room)) {
                 return void res.status(403).json({ error: 'Channel authorization required' })
             }
+            playerCache.delete(room)
             sse.schedulePresenceRefresh()
             res.status(202).json({ ok: true })
         })

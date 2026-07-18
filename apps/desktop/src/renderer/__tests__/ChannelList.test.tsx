@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ChannelList } from '../components/session-controls/ChannelList'
-import type { ConnectedPlayer } from '../types'
+import type { ChannelInfo, ConnectedPlayer } from '../types'
 
 vi.mock('boring-avatars', () => ({ default: () => <span aria-hidden="true" /> }))
 vi.mock('lucide-react', () => ({
@@ -18,12 +18,18 @@ const players: ConnectedPlayer[] = [
     { identity: 'remote-2', displayName: 'Remote 2', isMuted: false, isSpeaking: false, isLocal: false, volume: 100 }
 ]
 
-const renderList = (isConnected: boolean, roomName: string) => render(
+const defaultChannels: ChannelInfo[] = [
+    { channel: 1, name: 'ch-1', playerCount: 0 },
+    { channel: 2, name: 'ch-2', playerCount: 1 }
+]
+
+const channelList = (
+    isConnected: boolean,
+    roomName: string,
+    channels: ChannelInfo[] = defaultChannels
+) => (
     <ChannelList
-        channels={[
-            { channel: 1, name: 'ch-1', playerCount: 0 },
-            { channel: 2, name: 'ch-2', playerCount: 1 }
-        ]}
+        channels={channels}
         channel={2}
         isConnected={isConnected}
         roomName={roomName}
@@ -39,6 +45,14 @@ const renderList = (isConnected: boolean, roomName: string) => render(
     />
 )
 
+const renderList = (
+    isConnected: boolean,
+    roomName: string,
+    channels: ChannelInfo[] = defaultChannels
+) => render(channelList(isConnected, roomName, channels))
+
+afterEach(() => vi.unstubAllGlobals())
+
 describe('ChannelList presence count', () => {
     it('uses the live participant list immediately for the connected room', () => {
         renderList(true, 'ch-2')
@@ -52,5 +66,35 @@ describe('ChannelList presence count', () => {
 
         const channel = screen.getByRole('button', { name: /Channel 2/ })
         expect(within(channel).getByText('1')).toHaveClass('channel-badge')
+    })
+
+    it('refreshes an open participant tooltip when the directory count changes', async () => {
+        const fetchPlayers = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ players: ['mac', 'Burak', 'Alper'] })
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ players: ['mac', 'Burak'] })
+            })
+        vi.stubGlobal('fetch', fetchPlayers)
+        const initialChannels: ChannelInfo[] = [
+            { channel: 1, name: 'ch-1', playerCount: 3 },
+            { channel: 2, name: 'ch-2', playerCount: 0 }
+        ]
+        const view = renderList(false, '', initialChannels)
+
+        fireEvent.mouseEnter(screen.getByRole('button', { name: /Channel 1/ }))
+        await waitFor(() => expect(screen.getByText('Alper')).toBeInTheDocument())
+
+        view.rerender(channelList(false, '', [
+            { channel: 1, name: 'ch-1', playerCount: 2 },
+            { channel: 2, name: 'ch-2', playerCount: 0 }
+        ]))
+
+        await waitFor(() => expect(fetchPlayers).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(screen.queryByText('Alper')).not.toBeInTheDocument())
+        expect(screen.getByText('Burak')).toBeInTheDocument()
     })
 })

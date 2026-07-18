@@ -1,5 +1,6 @@
 import Avatar from 'boring-avatars'
 import { Hash, Lock, Plus } from 'lucide-react'
+import { useMemo } from 'react'
 import type { ChannelInfo, ConnectedPlayer } from '../../types'
 import { PlayerList } from './PlayerList'
 import type { ChannelSelectionHandler, SelectedCustomRoom } from './types'
@@ -38,7 +39,14 @@ export function ChannelList({
 }: ChannelListProps) {
     const defaultChannels = channels.filter((item) => !item.isCustom)
     const customChannels = channels.filter((item) => item.isCustom)
-    const { hoverPlayers, handleChannelHover, handleChannelLeave } = useChannelHover()
+    const hoverPlayerCounts = useMemo(() => Object.fromEntries(channels.map((item) => {
+        const itemRoomName = item.isCustom
+            ? item.roomName || item.name
+            : `ch-${item.channel ?? 0}`
+        const isCurrent = isConnected && roomName === itemRoomName
+        return [itemRoomName, isCurrent ? players.length : item.playerCount]
+    })), [channels, isConnected, players.length, roomName])
+    const { hoverPlayers, handleChannelHover, handleChannelLeave } = useChannelHover(hoverPlayerCounts)
 
     const renderPlayers = () => (
         <PlayerList
