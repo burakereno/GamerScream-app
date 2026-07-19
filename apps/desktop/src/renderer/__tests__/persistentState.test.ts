@@ -72,6 +72,57 @@ describe('persistent desktop state', () => {
         expect(await store.getDeviceId()).toBe('e8df0e95-7600-41f0-b835-f5504bbbfafd')
     })
 
+    it('migrates legacy settings into a versioned file without losing mute preferences', async () => {
+        const directory = await temporaryDirectory()
+        const settingsPath = join(directory, 'settings.json')
+        await writeFile(settingsPath, JSON.stringify({
+            username: 'Legacy Player',
+            channel: 2,
+            autoConnect: false,
+            muteToggleEnabled: true,
+            muteToggleKey: 'KeyN',
+            joinSoundId: 'bubble'
+        }))
+        const store = createPersistentStateStore({ directory, encryption })
+
+        expect(await store.getSettings()).toEqual({
+            username: 'Legacy Player',
+            channel: 2,
+            muteToggleEnabled: true,
+            muteToggleKey: 'KeyN',
+            joinSoundId: 'bubble'
+        })
+        expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toEqual({
+            settingsVersion: 1,
+            settings: {
+                username: 'Legacy Player',
+                channel: 2,
+                muteToggleEnabled: true,
+                muteToggleKey: 'KeyN',
+                joinSoundId: 'bubble'
+            }
+        })
+    })
+
+    it('round-trips validated participant volumes through a versioned private file', async () => {
+        const directory = await temporaryDirectory()
+        const store = createPersistentStateStore({ directory, encryption })
+        const volumes = {
+            'e8df0e95-7600-41f0-b835-f5504bbbfafd': 35,
+            'legacy-player': 80
+        }
+
+        expect(await store.setPlayerVolumes(volumes)).toBe(true)
+        expect(await store.getPlayerVolumes()).toEqual(volumes)
+
+        const volumePath = join(directory, 'player-volumes.json')
+        expect(JSON.parse(await readFile(volumePath, 'utf8'))).toEqual({
+            volumesVersion: 1,
+            volumes
+        })
+        expect((await stat(volumePath)).mode & 0o777).toBe(0o600)
+    })
+
     it('rejects settings that were tampered with on disk or bypassed IPC validation', async () => {
         const directory = await temporaryDirectory()
         const store = createPersistentStateStore({ directory, encryption })

@@ -4,59 +4,88 @@ import { defaultSettings, mergeStoredSettings } from './settingsState'
 
 const STORAGE_KEY = 'gamerscream-settings'
 
+function loadCachedSettings(): AppSettings | null {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        return stored ? mergeStoredSettings(JSON.parse(stored)) : null
+    } catch {
+        return null
+    }
+}
+
+function cacheSettings(settings: AppSettings): void {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    } catch (error) {
+        console.warn('Failed to cache settings:', error)
+    }
+}
+
+async function persistSettings(settings: AppSettings): Promise<void> {
+    cacheSettings(settings)
+    try {
+        const persisted = await window.electronAPI?.setStoredSettings?.(JSON.stringify(settings))
+        if (persisted === false) console.warn('Failed to persist settings')
+    } catch (error) {
+        console.warn('Failed to persist settings:', error)
+    }
+}
+
 export function useSettings() {
     // SYNC init from localStorage — guarantees settings.username is available
     // on the very first render (prevents hasEnteredName flash bug)
-    const [settings, setSettings] = useState<AppSettings>(() => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY)
-            if (stored) {
-                const merged = mergeStoredSettings(JSON.parse(stored))
-                if (merged) return merged
-            }
-        } catch {
-            // ignore parse errors
-        }
-        return defaultSettings
-    })
+    const initialSettings = useRef(loadCachedSettings())
+    const [settings, setSettings] = useState<AppSettings>(initialSettings.current ?? defaultSettings)
+    const [hydrated, setHydrated] = useState(false)
+    const hydratedRef = useRef(false)
+    const pendingSettings = useRef<Partial<AppSettings>>({})
+    const skipNextPersist = useRef(false)
 
-    const recovered = useRef(false)
-
-    // ASYNC recovery: if localStorage was empty (macOS translocation),
-    // try to recover from file-based storage and backfill localStorage
+    // The file is canonical. localStorage is only a synchronous launch cache,
+    // so never write defaults or cached values before file hydration finishes.
     useEffect(() => {
-        if (settings.username) return // Already have settings, no recovery needed
+        let cancelled = false
         ;(async () => {
+            let fileSettings: AppSettings | null = null
             try {
                 const fileStored = await window.electronAPI?.getStoredSettings?.()
-                const merged = mergeStoredSettings(fileStored)
-                if (merged?.username) {
-                    setSettings(merged)
-                    // Backfill localStorage so next launch is instant
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
-                    recovered.current = true
-                }
-            } catch {
-                // ignore
+                fileSettings = mergeStoredSettings(fileStored)
+            } catch (error) {
+                console.warn('Failed to hydrate settings:', error)
             }
-        })()
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Debounced write to BOTH localStorage (fast) and file (reliable)
+            if (cancelled) return
+            const nextSettings = {
+                ...(fileSettings ?? initialSettings.current ?? defaultSettings),
+                ...pendingSettings.current
+            }
+            pendingSettings.current = {}
+            skipNextPersist.current = true
+            hydratedRef.current = true
+            setSettings(nextSettings)
+            setHydrated(true)
+            cacheSettings(nextSettings)
+
+            if (!fileSettings) await persistSettings(nextSettings)
+        })()
+        return () => { cancelled = true }
+    }, [])
+
+    // Persist user changes only after the canonical file has been hydrated.
     useEffect(() => {
-        if (recovered.current) {
-            recovered.current = false
-            return // Skip the write triggered by recovery itself
+        if (!hydrated) return
+        if (skipNextPersist.current) {
+            skipNextPersist.current = false
+            return
         }
         const timer = setTimeout(() => {
-            const json = JSON.stringify(settings)
-            localStorage.setItem(STORAGE_KEY, json)
-            window.electronAPI?.setStoredSettings?.(json)
+            void persistSettings(settings)
         }, 300)
         return () => clearTimeout(timer)
-    }, [settings])
+    }, [settings, hydrated])
 
     const updateSetting = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+        if (!hydratedRef.current) pendingSettings.current[key] = value
         setSettings((prev) => ({ ...prev, [key]: value }))
     }, [])
 

@@ -21,6 +21,8 @@ export interface ElectronAPI {
     removeStoredToken: () => Promise<boolean>
     getStoredSettings: () => Promise<Record<string, unknown> | null>
     setStoredSettings: (data: string) => Promise<boolean>
+    getPlayerVolumes: () => Promise<Record<string, number> | null>
+    setPlayerVolumes: (data: string) => Promise<boolean>
     getDeviceId: () => Promise<string | null>
     setDeviceId: (id: string) => Promise<boolean>
 }

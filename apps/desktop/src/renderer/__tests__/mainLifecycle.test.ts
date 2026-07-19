@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { createOverlayLifecycle } from '../../main/overlayLifecycle'
 import { configureSingleInstance } from '../../main/singleInstance'
 import { createPttStateController } from '../../main/pttState'
+import { configurePersistentUserDataPath } from '../../main/userDataPath'
+import { join } from 'node:path'
 
 class FakeOverlayWindow {
     destroyed = false
@@ -24,6 +26,22 @@ class FakeOverlayWindow {
         this.closedListener?.()
     }
 }
+
+describe('persistent user data location', () => {
+    it('keeps the existing desktop directory stable when the display name changes', () => {
+        const app = {
+            getPath: vi.fn(() => '/Users/player/Library/Application Support'),
+            setPath: vi.fn()
+        }
+
+        configurePersistentUserDataPath(app)
+
+        expect(app.setPath).toHaveBeenCalledWith(
+            'userData',
+            join('/Users/player/Library/Application Support', 'desktop')
+        )
+    })
+})
 
 describe('overlay lifecycle', () => {
     it('an old close event or timer cannot clear or close the replacement overlay', () => {

@@ -55,16 +55,16 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 - Individual volume sliders per remote participant (0–100%, step 5)
 - **Master channel volume** slider to adjust all remote players at once
 - **Mute All / Unmute All** toggle button on master slider row
-- Volume settings **persist per device** (UUID stored in `localStorage`)
+- Volume settings **persist per device** in a validated private file, with `localStorage` used only as a launch cache
 - Device ID sent as LiveKit token metadata—survives username changes
 
 ### Audio Device Management
 - Microphone selector with level slider (step 5)
 - Speaker/output device selector
-- Settings persist in `localStorage`
+- Settings use a versioned private file as the canonical store, with `localStorage` used only as a launch cache
 
 ### Session Management
-- Auto-connect toggle (remembers last channel on launch)
+- Remembers the last numbered channel; connecting remains an explicit user action
 - Channel list with live player counts (polled every 5s)
 - Connection status, room name display
 

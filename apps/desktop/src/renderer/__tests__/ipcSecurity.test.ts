@@ -3,6 +3,7 @@ import { isAllowedRendererPermission, isTrustedIpcSender, isTrustedRendererUrl }
 import {
     parseDeviceId,
     parseNotificationPayload,
+    parsePlayerVolumesPayload,
     parsePttKey,
     parseSettingsPayload,
     parseToken
@@ -77,6 +78,13 @@ describe('IPC payload validation', () => {
             body: 'Player joined'
         })
         expect(parseSettingsPayload(settings)).toEqual(JSON.parse(settings))
+        expect(parsePlayerVolumesPayload(JSON.stringify({
+            'e8df0e95-7600-41f0-b835-f5504bbbfafd': 35,
+            'legacy-player': 80
+        }))).toEqual({
+            'e8df0e95-7600-41f0-b835-f5504bbbfafd': 35,
+            'legacy-player': 80
+        })
     })
 
     it('rejects malformed or unbounded values', () => {
@@ -86,5 +94,6 @@ describe('IPC payload validation', () => {
         expect(() => parsePttKey('x'.repeat(80))).toThrow('Invalid shortcut key')
         expect(() => parseNotificationPayload({ title: 'x'.repeat(101), body: 'ok' })).toThrow('Invalid notification')
         expect(() => parseSettingsPayload(JSON.stringify({ micLevel: 900 }))).toThrow('Invalid settings')
+        expect(() => parsePlayerVolumesPayload(JSON.stringify({ player: 101 }))).toThrow('Invalid player volumes')
     })
 })

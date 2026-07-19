@@ -1,5 +1,5 @@
 import type { AppSettings } from '../types'
-import { parseSettingsRecord } from '../../shared/settings'
+import { migrateSettingsRecord } from '../../shared/settings'
 
 export const defaultSettings: AppSettings = {
     username: '',
@@ -18,7 +18,7 @@ export const defaultSettings: AppSettings = {
 
 export function mergeStoredSettings(value: unknown): AppSettings | null {
     try {
-        const persisted = parseSettingsRecord(value) as Partial<AppSettings>
+        const persisted = migrateSettingsRecord(value) as Partial<AppSettings>
         return { ...defaultSettings, ...persisted }
     } catch {
         return null

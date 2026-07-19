@@ -3,6 +3,12 @@ const SETTING_KEYS = new Set([
     'username', 'microphoneId', 'speakerId', 'micLevel', 'channel', 'noiseSuppression',
     'inputMode', 'pttKey', 'muteToggleEnabled', 'muteToggleKey', 'vadThreshold', 'joinSoundId'
 ])
+export const SETTINGS_VERSION = 1
+
+export interface SettingsFileRecord {
+    settingsVersion: typeof SETTINGS_VERSION
+    settings: Record<string, unknown>
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -23,27 +29,71 @@ function isShortcut(value: unknown): boolean {
     return isBoundedString(value, 64, false) && !/\s/.test(value)
 }
 
+function isValidSetting(key: string, value: unknown): boolean {
+    switch (key) {
+        case 'username': return isBoundedString(value, 20)
+        case 'microphoneId':
+        case 'speakerId': return isBoundedString(value, 1024)
+        case 'micLevel':
+        case 'noiseSuppression': return isNumberInRange(value, 0, 100)
+        case 'channel': return Number.isInteger(value) && isNumberInRange(value, 1, 5)
+        case 'inputMode': return ['voice', 'ptt', 'vad'].includes(String(value))
+        case 'pttKey':
+        case 'muteToggleKey': return isShortcut(value)
+        case 'muteToggleEnabled': return typeof value === 'boolean'
+        case 'vadThreshold': return isNumberInRange(value, 1, 50)
+        case 'joinSoundId': return typeof value === 'string' && JOIN_SOUND_IDS.has(value)
+        default: return false
+    }
+}
+
 export function parseSettingsRecord(value: unknown): Record<string, unknown> {
     if (!isRecord(value) || Object.keys(value).some((key) => !SETTING_KEYS.has(key))) {
         throw new TypeError('Invalid settings')
     }
 
-    const valid =
-        (value.username === undefined || isBoundedString(value.username, 20)) &&
-        (value.microphoneId === undefined || isBoundedString(value.microphoneId, 1024)) &&
-        (value.speakerId === undefined || isBoundedString(value.speakerId, 1024)) &&
-        (value.micLevel === undefined || isNumberInRange(value.micLevel, 0, 100)) &&
-        (value.channel === undefined || Number.isInteger(value.channel) && isNumberInRange(value.channel, 1, 5)) &&
-        (value.noiseSuppression === undefined || isNumberInRange(value.noiseSuppression, 0, 100)) &&
-        (value.inputMode === undefined || ['voice', 'ptt', 'vad'].includes(String(value.inputMode))) &&
-        (value.pttKey === undefined || isShortcut(value.pttKey)) &&
-        (value.muteToggleEnabled === undefined || typeof value.muteToggleEnabled === 'boolean') &&
-        (value.muteToggleKey === undefined || isShortcut(value.muteToggleKey)) &&
-        (value.vadThreshold === undefined || isNumberInRange(value.vadThreshold, 1, 50)) &&
-        (value.joinSoundId === undefined || typeof value.joinSoundId === 'string' && JOIN_SOUND_IDS.has(value.joinSoundId))
-
-    if (!valid) throw new TypeError('Invalid settings')
+    if (!Object.entries(value).every(([key, setting]) => isValidSetting(key, setting))) {
+        throw new TypeError('Invalid settings')
+    }
     return value
+}
+
+export function migrateSettingsRecord(value: unknown): Record<string, unknown> {
+    if (!isRecord(value)) throw new TypeError('Invalid settings')
+
+    const migrated: Record<string, unknown> = {}
+    for (const [key, setting] of Object.entries(value)) {
+        if (SETTING_KEYS.has(key) && isValidSetting(key, setting)) migrated[key] = setting
+    }
+    if (Object.keys(migrated).length === 0) throw new TypeError('Invalid settings')
+    return migrated
+}
+
+export function createSettingsFileRecord(value: unknown): SettingsFileRecord {
+    return {
+        settingsVersion: SETTINGS_VERSION,
+        settings: parseSettingsRecord(value)
+    }
+}
+
+export function parseSettingsFileRecord(value: unknown): {
+    settings: Record<string, unknown>
+    needsMigration: boolean
+} {
+    if (!isRecord(value)) throw new TypeError('Invalid settings')
+
+    if ('settingsVersion' in value || 'settings' in value) {
+        if (value.settingsVersion !== SETTINGS_VERSION) throw new TypeError('Invalid settings')
+        return {
+            settings: parseSettingsRecord(value.settings),
+            needsMigration: false
+        }
+    }
+
+    return {
+        settings: migrateSettingsRecord(value),
+        needsMigration: true
+    }
 }
 
 export function parseSettingsPayload(value: unknown): Record<string, unknown> {

@@ -1,22 +1,27 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { RemoteAudioTrack, type RemoteParticipant, type RemoteTrackPublication, type Room } from 'livekit-client'
 import type { ConnectedPlayer } from '../types'
 import { getVolumeKey, type RefLike } from './liveKitCore'
+import { parsePlayerVolumesRecord, type PlayerVolumesRecord } from '../../shared/playerVolumes'
 
 const VOLUME_STORAGE_KEY = 'gamerscream-player-volumes'
 
 function loadVolumes(): Map<string, number> {
     try {
         const stored = localStorage.getItem(VOLUME_STORAGE_KEY)
-        if (stored) return new Map(Object.entries(JSON.parse(stored)).map(([key, value]) => [key, Number(value)]))
+        if (stored) return new Map(Object.entries(parsePlayerVolumesRecord(JSON.parse(stored))))
     } catch {
         // Ignore malformed legacy preferences.
     }
     return new Map()
 }
 
-function saveVolumes(volumes: Map<string, number>): void {
-    localStorage.setItem(VOLUME_STORAGE_KEY, JSON.stringify(Object.fromEntries(volumes)))
+function volumesRecord(volumes: Map<string, number>): PlayerVolumesRecord {
+    return parsePlayerVolumesRecord(Object.fromEntries(volumes))
+}
+
+function cacheVolumes(record: PlayerVolumesRecord): void {
+    localStorage.setItem(VOLUME_STORAGE_KEY, JSON.stringify(record))
 }
 
 function setParticipantTrackVolume(participant: RemoteParticipant, volume: number): void {
@@ -43,6 +48,48 @@ export function useParticipantAudio(): ParticipantAudioController {
     const allMutedRef = useRef(false)
     const volumeMapRef = useRef(loadVolumes())
     const savedVolumesRef = useRef(new Map<string, number>())
+    const volumesDirtyRef = useRef(false)
+
+    const persistVolumes = useCallback((volumes: Map<string, number>) => {
+        volumesDirtyRef.current = true
+        let record: PlayerVolumesRecord
+        try {
+            record = volumesRecord(volumes)
+        } catch (error) {
+            console.warn('Failed to validate player volumes:', error)
+            return
+        }
+        try {
+            cacheVolumes(record)
+        } catch (error) {
+            console.warn('Failed to cache player volumes:', error)
+        }
+        void window.electronAPI?.setPlayerVolumes?.(JSON.stringify(record)).then((persisted) => {
+            if (persisted === false) console.warn('Failed to persist player volumes')
+        }).catch((error) => console.warn('Failed to persist player volumes:', error))
+    }, [])
+
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            try {
+                const stored = await window.electronAPI?.getPlayerVolumes?.()
+                if (cancelled) return
+                if (stored) {
+                    const hydrated = new Map(Object.entries(parsePlayerVolumesRecord(stored)))
+                    if (!volumesDirtyRef.current) {
+                        volumeMapRef.current = hydrated
+                        cacheVolumes(volumesRecord(hydrated))
+                    }
+                } else if (volumeMapRef.current.size > 0) {
+                    persistVolumes(volumeMapRef.current)
+                }
+            } catch (error) {
+                console.warn('Failed to hydrate player volumes:', error)
+            }
+        })()
+        return () => { cancelled = true }
+    }, [persistVolumes])
 
     const updatePlayerList = useCallback((room: Room) => {
         const localParticipant = room.localParticipant
@@ -90,16 +137,16 @@ export function useParticipantAudio(): ParticipantAudioController {
                 savedVolumesRef.current.set(key, volume)
                 const persisted = new Map(volumeMapRef.current)
                 savedVolumesRef.current.forEach((saved, savedKey) => persisted.set(savedKey, saved))
-                saveVolumes(persisted)
+                persistVolumes(persisted)
                 updatePlayerList(room)
                 return
             }
             setParticipantTrackVolume(participant, volume / 100)
         }
         volumeMapRef.current.set(key, volume)
-        saveVolumes(volumeMapRef.current)
+        persistVolumes(volumeMapRef.current)
         updatePlayerList(room)
-    }, [updatePlayerList])
+    }, [persistVolumes, updatePlayerList])
 
     const toggleMuteAll = useCallback((room: Room | null) => {
         if (!room) return

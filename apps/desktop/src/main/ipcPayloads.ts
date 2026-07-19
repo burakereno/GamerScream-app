@@ -1,5 +1,6 @@
 import { isValidDeviceId } from '../shared/identifiers'
 export { parseSettingsPayload } from '../shared/settings'
+export { parsePlayerVolumesPayload } from '../shared/playerVolumes'
 
 // Current server access sessions are `<base64url payload>.<43-char HMAC-SHA256>`.
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,980}\.[A-Za-z0-9_-]{43}$/

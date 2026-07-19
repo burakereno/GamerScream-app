@@ -7,11 +7,14 @@ import { createDesktopUpdater } from './desktopUpdater'
 import { createMainWindowController } from './mainWindow'
 import { createPersistentStateStore, type PersistentStateStore } from './persistentState'
 import { configureSingleInstance } from './singleInstance'
+import { configurePersistentUserDataPath } from './userDataPath'
 
 protocol.registerSchemesAsPrivileged([{
     scheme: APP_SCHEME,
     privileges: APP_SCHEME_PRIVILEGES
 }])
+
+configurePersistentUserDataPath(app)
 
 process.on('uncaughtException', (error) => {
     if (!app.isPackaged && (error as NodeJS.ErrnoException).code === 'EIO') return

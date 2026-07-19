@@ -1,5 +1,12 @@
 import { app, globalShortcut, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import { parseDeviceId, parseNotificationPayload, parsePttKey, parseSettingsPayload, parseToken } from './ipcPayloads'
+import {
+    parseDeviceId,
+    parseNotificationPayload,
+    parsePlayerVolumesPayload,
+    parsePttKey,
+    parseSettingsPayload,
+    parseToken
+} from './ipcPayloads'
 import type { PersistentStateStore } from './persistentState'
 import { createPttStateController } from './pttState'
 import type { UpdateStateController } from './updateState'
@@ -122,6 +129,14 @@ export function registerDesktopIpc({
     ipcMain.handle('set-stored-settings', (event, value: unknown) => {
         requireTrustedEvent(event)
         return getPersistentState().setSettings(parseSettingsPayload(value))
+    })
+    ipcMain.handle('get-player-volumes', (event) => {
+        requireTrustedEvent(event)
+        return getPersistentState().getPlayerVolumes()
+    })
+    ipcMain.handle('set-player-volumes', (event, value: unknown) => {
+        requireTrustedEvent(event)
+        return getPersistentState().setPlayerVolumes(parsePlayerVolumesPayload(value))
     })
     ipcMain.handle('get-device-id', (event) => {
         requireTrustedEvent(event)

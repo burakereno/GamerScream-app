@@ -2,6 +2,13 @@ import { chmod, mkdir, open, rename, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { parseDeviceId, parseSettingsPayload, parseToken } from './ipcPayloads'
+import { createSettingsFileRecord, parseSettingsFileRecord } from '../shared/settings'
+import {
+    createPlayerVolumesFileRecord,
+    parsePlayerVolumesFileRecord,
+    parsePlayerVolumesRecord,
+    type PlayerVolumesRecord
+} from '../shared/playerVolumes'
 
 export interface EncryptionAdapter {
     isAvailable(): boolean
@@ -20,6 +27,8 @@ export interface PersistentStateStore {
     removeToken(): Promise<boolean>
     getSettings(): Promise<Record<string, unknown> | null>
     setSettings(settings: Record<string, unknown>): Promise<boolean>
+    getPlayerVolumes(): Promise<PlayerVolumesRecord | null>
+    setPlayerVolumes(volumes: PlayerVolumesRecord): Promise<boolean>
     getDeviceId(): Promise<string | null>
     setDeviceId(deviceId: string): Promise<boolean>
 }
@@ -69,6 +78,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createPersistentStateStore({ directory, encryption }: PersistentStateStoreOptions): PersistentStateStore {
     const tokenPath = join(directory, 'auth-token.json')
     const settingsPath = join(directory, 'settings.json')
+    const playerVolumesPath = join(directory, 'player-volumes.json')
     const deviceIdPath = join(directory, 'device-id.json')
 
     const setToken = async (tokenValue: string): Promise<boolean> => {
@@ -123,7 +133,14 @@ export function createPersistentStateStore({ directory, encryption }: Persistent
             const stored = await readJson(settingsPath, 16_384)
             if (!isRecord(stored)) return null
             try {
-                return parseSettingsPayload(JSON.stringify(stored))
+                const parsed = parseSettingsFileRecord(stored)
+                if (parsed.needsMigration) {
+                    await atomicPrivateWrite(
+                        settingsPath,
+                        JSON.stringify(createSettingsFileRecord(parsed.settings))
+                    ).catch((error) => console.warn('Failed to migrate settings file:', error))
+                }
+                return parsed.settings
             } catch {
                 return null
             }
@@ -131,7 +148,28 @@ export function createPersistentStateStore({ directory, encryption }: Persistent
         setSettings: async (settings) => {
             try {
                 const validated = parseSettingsPayload(JSON.stringify(settings))
-                await atomicPrivateWrite(settingsPath, JSON.stringify(validated))
+                await atomicPrivateWrite(settingsPath, JSON.stringify(createSettingsFileRecord(validated)))
+                return true
+            } catch {
+                return false
+            }
+        },
+        getPlayerVolumes: async () => {
+            const stored = await readJson(playerVolumesPath, 65_536)
+            if (!isRecord(stored)) return null
+            try {
+                return parsePlayerVolumesFileRecord(stored)
+            } catch {
+                return null
+            }
+        },
+        setPlayerVolumes: async (volumes) => {
+            try {
+                const validated = parsePlayerVolumesRecord(volumes)
+                await atomicPrivateWrite(
+                    playerVolumesPath,
+                    JSON.stringify(createPlayerVolumesFileRecord(validated))
+                )
                 return true
             } catch {
                 return false
