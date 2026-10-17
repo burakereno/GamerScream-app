@@ -73,6 +73,11 @@ export function registerDesktopIpc({
         notifications.show(notification.title, notification.body)
     })
 
+    ipcMain.on('set-mute-overlay-visible', (event, visible: unknown) => {
+        if (!isTrustedEvent(event) || typeof visible !== 'boolean') return
+        notifications.setMuteOverlayVisible(visible)
+    })
+
     ipcMain.on('register-ptt-key', (event, value: unknown) => {
         if (!isTrustedEvent(event)) return
         let key: string

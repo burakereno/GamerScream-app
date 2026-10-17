@@ -44,12 +44,15 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 - State persisted to `admin-state.json` — survives server restarts
 
 ### Overlay Notifications
-- Custom always-on-top `BrowserWindow` overlay (replaces native `Notification`)
-- Visible even during fullscreen games
+- Custom always-on-top `BrowserWindow` notifications on Windows; native notifications on macOS
 - Glassmorphism styling with slide-in/out animation
 - Non-focusable, skip-taskbar, ignores mouse events — won't steal game focus
 - Auto-dismisses after 5 seconds
-- Shows when a user joins or leaves a channel
+- Shows when a user joins, leaves, mutes, or unmutes
+- Manual mute shows a separate persistent red 64px microphone icon at the primary display's top right until unmute
+- The local mute icon clears on disconnect, input-mode change, renderer reload/crash, or app close; PTT/VAD gating does not show it
+- Transient overlay banners sit below the local mute icon; other participants' notification behavior is unchanged
+- Fullscreen game visibility requires platform/game verification, especially on Windows
 
 ### Per-Player Volume Control
 - Individual volume sliders per remote participant (0–100%, step 5)
@@ -93,7 +96,8 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | `apps/server/src/index.ts` | Express API: token gen, room list, custom channels, PIN verify, access control |
 | `apps/desktop/src/renderer/components/PinEntry.tsx` | PIN entry screen (first launch) |
 | `apps/desktop/src/renderer/components/AdminPanel.tsx` | Admin panel (PIN change, kick, token invalidation) |
-| `apps/desktop/src/main/overlay.html` | Overlay notification window (always-on-top) |
+| `apps/desktop/src/main/desktopNotifications.ts` | Transient desktop notifications and overlay placement |
+| `apps/desktop/src/main/muteOverlay.ts` | Persistent local mute indicator lifecycle |
 
 ## API Endpoints (Server)
 

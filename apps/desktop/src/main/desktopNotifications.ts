@@ -1,5 +1,7 @@
-import { BrowserWindow, Notification as ElectronNotification, screen } from 'electron'
+import { Notification as ElectronNotification, screen, type BrowserWindow } from 'electron'
 import { createOverlayLifecycle } from './overlayLifecycle'
+import { createMuteOverlayController, MUTE_OVERLAY_GAP, MUTE_OVERLAY_SIZE } from './muteOverlay'
+import { createOverlayWindow, topRightOverlayBounds } from './overlayWindow'
 
 type OverlayType = 'join' | 'leave' | 'mute' | 'unmute'
 
@@ -32,44 +34,25 @@ const OVERLAY_CONFIG: Record<OverlayType, { action: string; nameColor: string; i
 
 export interface DesktopNotificationPresenter {
     show(title: string, body: string): void
+    setMuteOverlayVisible(visible: boolean): void
+    dispose(): void
 }
 
 export function createDesktopNotificationPresenter(): DesktopNotificationPresenter {
     const overlayLifecycle = createOverlayLifecycle<BrowserWindow>()
+    const notificationBounds = () => topRightOverlayBounds(
+        screen.getPrimaryDisplay().workArea, 280, 60,
+        muteOverlay.isVisible() ? MUTE_OVERLAY_SIZE + MUTE_OVERLAY_GAP : 0
+    )
+    const muteOverlay = createMuteOverlayController(() => {
+        const window = overlayLifecycle.current()
+        if (window && !window.isDestroyed()) window.setBounds(notificationBounds())
+    })
 
     const showOverlay = (name: string, type: OverlayType): void => {
-        const { width } = screen.getPrimaryDisplay().workAreaSize
-        const overlayWidth = 280
-        const overlayHeight = 60
-        const notificationWindow = overlayLifecycle.show(() => new BrowserWindow({
-            width: overlayWidth,
-            height: overlayHeight,
-            x: width - overlayWidth - 20,
-            y: 20,
-            frame: false,
-            transparent: true,
-            show: false,
-            skipTaskbar: true,
-            focusable: false,
-            resizable: false,
-            hasShadow: false,
-            backgroundColor: '#00000000',
-            ...(process.platform === 'win32' ? { type: 'toolbar' as const, roundedCorners: false } : {}),
-            webPreferences: {
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true,
-                webSecurity: true
-            }
-        }), 5000)
-
-        notificationWindow.setIgnoreMouseEvents(true)
-        notificationWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-        notificationWindow.once('ready-to-show', () => {
-            if (notificationWindow.isDestroyed()) return
-            notificationWindow.setAlwaysOnTop(true, 'pop-up-menu')
-            notificationWindow.showInactive()
-        })
+        const notificationWindow = overlayLifecycle.show(
+            () => createOverlayWindow(notificationBounds()), 5000
+        )
 
         const config = OVERLAY_CONFIG[type]
         const safeName = name.replace(/[&<>"']/g, character => (
@@ -92,6 +75,12 @@ body{background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSy
     }
 
     return {
+        setMuteOverlayVisible: muteOverlay.setVisible,
+        dispose: () => {
+            muteOverlay.setVisible(false)
+            const window = overlayLifecycle.current()
+            if (window && !window.isDestroyed()) window.close()
+        },
         show: (title, body) => {
             if (process.platform === 'darwin') {
                 new ElectronNotification({ title, body }).show()

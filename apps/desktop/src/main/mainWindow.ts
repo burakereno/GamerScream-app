@@ -18,7 +18,9 @@ export interface MainWindowController {
     requireTrustedEvent(event: IpcMainInvokeEvent): void
 }
 
-export function createMainWindowController(): MainWindowController {
+export function createMainWindowController(
+    onRendererUnavailable: () => void = () => {}
+): MainWindowController {
     let mainWindow: BrowserWindow | null = null
     let expectedRendererUrl = ''
 
@@ -60,6 +62,8 @@ export function createMainWindowController(): MainWindowController {
         })
         mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
         mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        mainWindow.webContents.on('did-start-loading', onRendererUnavailable)
+        mainWindow.webContents.on('render-process-gone', onRendererUnavailable)
 
         const rendererSession = mainWindow.webContents.session
         rendererSession.setPermissionCheckHandler((webContents, permission, _origin, details) => {
@@ -86,6 +90,7 @@ export function createMainWindowController(): MainWindowController {
 
         mainWindow.on('closed', () => {
             mainWindow = null
+            onRendererUnavailable()
         })
 
         if (process.platform !== 'darwin') Menu.setApplicationMenu(null)

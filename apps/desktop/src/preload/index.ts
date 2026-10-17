@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showNotification: (title: string, body: string) => {
         ipcRenderer.send('show-notification', { title, body })
     },
+    setMuteOverlayVisible: (visible: boolean) => {
+        ipcRenderer.send('set-mute-overlay-visible', visible)
+    },
 
     // Push-to-Talk — uses removeAllListeners to prevent listener leak
     onPttKeyDown: (callback: () => void) => {

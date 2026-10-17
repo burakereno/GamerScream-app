@@ -14,6 +14,7 @@ import {
     withLocalSpeakingState
 } from './hooks/app/useLocalSpeakingIndicator'
 import { useParticipantNotifications } from './hooks/app/useParticipantNotifications'
+import { useMuteOverlay } from './hooks/app/useMuteOverlay'
 import { useVoiceInputLifecycle } from './hooks/app/useVoiceInputLifecycle'
 import { useAudioDevices } from './hooks/useAudioDevices'
 import { useMicrophoneLevelMonitor } from './hooks/useMicrophoneLevelMonitor'
@@ -88,6 +89,8 @@ export default function App() {
         updateInputModeMetadata,
         updateReconnectNoiseSuppression
     } = useLiveKit(callbacks, accessVerified)
+
+    useMuteOverlay({ isConnected, isMuted, inputMode: settings.inputMode })
 
     const {
         handleMicSelect,

@@ -28,9 +28,9 @@ const getPersistentState = (): PersistentStateStore => {
     return persistentState
 }
 
-const mainWindow = createMainWindowController()
-const updater = createDesktopUpdater((channel, ...args) => mainWindow.safeSend(channel, ...args))
 const notifications = createDesktopNotificationPresenter()
+const mainWindow = createMainWindowController(() => notifications.dispose())
+const updater = createDesktopUpdater((channel, ...args) => mainWindow.safeSend(channel, ...args))
 const isPrimaryInstance = configureSingleInstance(app, () => mainWindow.getWindow())
 
 registerDesktopIpc({
@@ -71,6 +71,8 @@ if (isPrimaryInstance) app.whenReady().then(() => {
         if (BrowserWindow.getAllWindows().length === 0) mainWindow.createWindow()
     })
 })
+
+app.on('before-quit', () => notifications.dispose())
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
