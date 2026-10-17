@@ -108,6 +108,15 @@ jobs:
           npm install --global "pnpm@$PNPM_VERSION"
           pnpm install --frozen-lockfile
 
+      # GitHub-hosted macOS runners intermittently lose HTTP/3 connections to
+      # Apple's ticket service: https://github.com/actions/runner-images/issues/14924
+      - name: Use HTTPS over TCP for Apple ticket delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'block return out quick proto udp from any to any port 443' | sudo pfctl -f -
+          sudo pfctl -E
+
       - name: Build verified macOS assets
         shell: bash
         run: scripts/build-macos-release.sh
