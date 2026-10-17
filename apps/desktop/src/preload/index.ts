@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setMuteOverlayVisible: (visible: boolean) => {
         ipcRenderer.send('set-mute-overlay-visible', visible)
     },
+    onMuteToggle: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('mute-toggle', listener)
+        return () => ipcRenderer.removeListener('mute-toggle', listener)
+    },
+    registerMuteToggleKey: (key: string) => {
+        ipcRenderer.send('register-mute-toggle-key', key)
+    },
+    unregisterMuteToggleKey: () => {
+        ipcRenderer.send('unregister-mute-toggle-key')
+    },
 
     // Push-to-Talk — uses removeAllListeners to prevent listener leak
     onPttKeyDown: (callback: () => void) => {

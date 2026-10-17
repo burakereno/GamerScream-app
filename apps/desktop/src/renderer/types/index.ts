@@ -7,6 +7,9 @@ export interface ElectronAPI {
     getAppVersion: () => Promise<string>
     showNotification: (title: string, body: string) => void
     setMuteOverlayVisible: (visible: boolean) => void
+    onMuteToggle: (callback: () => void) => () => void
+    registerMuteToggleKey: (key: string) => void
+    unregisterMuteToggleKey: () => void
     // Push-to-Talk
     onPttKeyDown: (callback: () => void) => void
     onPttKeyUp: (callback: () => void) => void

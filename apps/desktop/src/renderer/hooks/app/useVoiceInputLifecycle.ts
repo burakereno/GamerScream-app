@@ -225,23 +225,23 @@ export function useVoiceInputLifecycle({
             if (event.code === muteToggleKey && !event.repeat) handleToggle()
         }
         const onFocus = () => {
-            window.electronAPI?.unregisterPttKey?.()
+            window.electronAPI?.unregisterMuteToggleKey?.()
             window.addEventListener('keydown', handleKeyDown)
         }
         const onBlur = () => {
             window.removeEventListener('keydown', handleKeyDown)
-            window.electronAPI?.registerPttKey?.(accelerator)
+            window.electronAPI?.registerMuteToggleKey?.(accelerator)
         }
 
-        window.electronAPI?.onPttKeyDown?.(handleToggle)
+        const unsubscribe = window.electronAPI?.onMuteToggle?.(handleToggle)
         if (document.hasFocus()) window.addEventListener('keydown', handleKeyDown)
-        else window.electronAPI?.registerPttKey?.(accelerator)
+        else window.electronAPI?.registerMuteToggleKey?.(accelerator)
         window.addEventListener('focus', onFocus)
         window.addEventListener('blur', onBlur)
 
         return () => {
-            window.electronAPI?.offPttEvents?.()
-            window.electronAPI?.unregisterPttKey?.()
+            unsubscribe?.()
+            window.electronAPI?.unregisterMuteToggleKey?.()
             window.removeEventListener('keydown', handleKeyDown)
             window.removeEventListener('focus', onFocus)
             window.removeEventListener('blur', onBlur)

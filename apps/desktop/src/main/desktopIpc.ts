@@ -29,7 +29,7 @@ export function registerDesktopIpc({
     updateState,
     notifications
 }: DesktopIpcDependencies): void {
-    let currentPttKey: string | null = null
+    let currentInputKey: string | null = null
     const pttState = createPttStateController({
         emitDown: () => safeSend('ptt-key-down'),
         emitUp: () => safeSend('ptt-key-up'),
@@ -37,14 +37,14 @@ export function registerDesktopIpc({
         cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>)
     })
 
-    const unregisterPttKey = (): void => {
-        if (currentPttKey) {
+    const unregisterInputKey = (): void => {
+        if (currentInputKey) {
             try {
-                globalShortcut.unregister(currentPttKey)
+                globalShortcut.unregister(currentInputKey)
             } catch {
                 // Continue releasing the renderer state if native unregister fails.
             }
-            currentPttKey = null
+            currentInputKey = null
         }
         pttState.release()
     }
@@ -78,7 +78,7 @@ export function registerDesktopIpc({
         notifications.setMuteOverlayVisible(visible)
     })
 
-    ipcMain.on('register-ptt-key', (event, value: unknown) => {
+    const registerInputKey = (event: IpcMainEvent, value: unknown, onPress: () => void): void => {
         if (!isTrustedEvent(event)) return
         let key: string
         try {
@@ -86,26 +86,34 @@ export function registerDesktopIpc({
         } catch {
             return
         }
-        unregisterPttKey()
+        unregisterInputKey()
 
         try {
-            const registered = globalShortcut.register(key, () => pttState.keyDown())
+            const registered = globalShortcut.register(key, onPress)
             if (registered) {
-                currentPttKey = key
-                console.log(`🎤 PTT key registered: ${key}`)
+                currentInputKey = key
+                console.log(`Input key registered: ${key}`)
             } else {
-                console.warn(`⚠️ Failed to register PTT key: ${key}`)
+                console.warn(`Failed to register input key: ${key}`)
                 safeSend('ptt-register-failed', key)
             }
         } catch (error) {
-            console.warn('⚠️ PTT key registration error:', error)
+            console.warn('Input key registration error:', error)
             safeSend('ptt-register-failed', key)
         }
+    }
+    ipcMain.on('register-ptt-key', (event, value: unknown) => {
+        registerInputKey(event, value, () => pttState.keyDown())
+    })
+    ipcMain.on('register-mute-toggle-key', (event, value: unknown) => {
+        registerInputKey(event, value, () => safeSend('mute-toggle'))
     })
     ipcMain.on('unregister-ptt-key', (event) => {
         if (!isTrustedEvent(event)) return
-        unregisterPttKey()
-        console.log('🎤 PTT key unregistered')
+        unregisterInputKey()
+    })
+    ipcMain.on('unregister-mute-toggle-key', (event) => {
+        if (isTrustedEvent(event)) unregisterInputKey()
     })
     ipcMain.on('ptt-cancel-timer', (event) => {
         if (isTrustedEvent(event)) pttState.cancelTimer()
