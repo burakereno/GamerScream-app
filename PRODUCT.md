@@ -9,7 +9,7 @@ Lightweight, real-time voice chat for gaming parties. Built with **Electron + Re
 | Desktop App | Electron + Vite + React + TypeScript | `apps/desktop/` |
 | Backend API | Node.js + Express 5 | `apps/server/` |
 | Voice Engine | LiveKit (WebRTC) | Self-hosted on Oracle Cloud VM |
-| Landing Page | Next.js | `../web/` |
+| Landing Page | Shared Next.js microsite | `../../burakerenoglu/src/app/projects/gamerscream/` |
 
 **Monorepo** managed with `pnpm workspaces`.
 
@@ -172,7 +172,7 @@ ssh -i apps/desktop/build/ssh-key-2026-02-20.key ubuntu@144.24.183.24 "sudo syst
 
 - **Mac**: `.dmg` via `electron-builder` → GitHub Releases
 - **Windows**: unsigned `.exe` via `electron-builder` → GitHub Releases; SmartScreen may show an unknown-publisher warning
-- **Landing page**: [gamerscream.vercel.app](https://gamerscream.vercel.app) with download links
+- **Landing page**: canonical address [gamerscream.burakerenoglu.com](https://gamerscream.burakerenoglu.com), sourced from `burakereno/burakerenoglu` (`main`, Vercel project `burakerenoglu`). Local preview: `http://localhost:3187/projects/gamerscream`. Publication follows local approval and domain verification; the legacy `../web/` repo is no longer the source.
 
 ## Upcoming / TODO
 

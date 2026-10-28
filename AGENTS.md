@@ -11,7 +11,11 @@ Bu repo GamerScream desktop app ve backend API reposudur.
 | Desktop | `apps/desktop/` | Electron + Vite + React + TypeScript |
 | Server | `apps/server/` | Node.js + Express 5 + LiveKit |
 
-Landing page ayri repodur: `../web/`.
+Yeni landing page ortak site reposundadir: `../../burakerenoglu/src/app/projects/gamerscream/`. Once `../../burakerenoglu/AGENTS.md` dosyasini oku. Eski `../web/` reposu yeni tanitim sitesi icin kullanilmaz.
+
+- Tanitim sitesi icin yeni kanonik adres `https://gamerscream.burakerenoglu.com` olarak belirlenmistir (28 Ekim 2026). Web baglantisi veya yayin dokumani guncellerken eski Vercel adresini kullanma.
+- Bu adres yalnizca tanitim sitesine aittir; mevcut `https://gamerscream.duckdns.org` backend/API adresini veya release/update feed'lerini degistirme.
+- Tanitim sitesi Vercel `burakerenoglu` projesinde `burakereno/burakerenoglu` reposunun `main` branch'inden yayinlanir. Onayli site degisiklikleri o repoya push edilmelidir; app release veya eski web reposuna push site tasarimini yayinlamaz.
 
 ## Baglam Dosyalari
 
